@@ -69,7 +69,7 @@ class DnfManager(PackageManager):
             sys.stdout.write("\r" + " " * 25 + "\r")
             sys.stdout.flush()
 
-            result = proc.stdout.read()
+            result = proc.stdout.read() if proc.stdout else ""
 
             if proc.returncode != 0:
                 logger.error(f"Failed to install packages: {result}")

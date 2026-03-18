@@ -23,7 +23,7 @@ def setup_logging(debug: bool = False, dry_run: bool = False) -> None:
         logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     )
 
-    handlers = [console_handler]
+    handlers: list[logging.Handler] = [console_handler]
 
     if not dry_run:
         try:

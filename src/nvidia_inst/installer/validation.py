@@ -132,6 +132,7 @@ def post_install_validate(distro_id: str, expected_packages: list[str]) -> Valid
         check = subprocess.run(
             ["nvidia-smi"],
             capture_output=True,
+            text=True,
             timeout=10,
         )
         result.nvidia_smi_works = check.returncode == 0

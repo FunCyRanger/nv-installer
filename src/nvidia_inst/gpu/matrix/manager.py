@@ -6,6 +6,7 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 
 from nvidia_inst.gpu.matrix.data import (
     ComputeCapability,
@@ -81,13 +82,17 @@ class MatrixManager:
     def get_last_update_time(self) -> str | None:
         """Get when matrix was last updated."""
         if self._matrix_data:
-            return self._matrix_data.get("_meta", {}).get("last_updated")
+            meta = self._matrix_data.get("_meta")
+            if meta and isinstance(meta, dict):
+                return cast(str, meta.get("last_updated"))
         return None
 
     def get_version(self) -> str:
         """Get matrix version."""
         if self._matrix_data:
-            return self._matrix_data.get("_meta", {}).get("version", "unknown")
+            meta = self._matrix_data.get("_meta")
+            if meta and isinstance(meta, dict):
+                return cast(str, meta.get("version", "unknown"))
         return "unknown"
 
     def get_generation_info(self, generation: str) -> GPUGenerationInfo | None:
@@ -131,11 +136,13 @@ class MatrixManager:
     def get_all_branches(self) -> dict[str, DriverBranchInfo]:
         """Get all driver branches."""
         self._ensure_matrix_loaded()
-        result = {}
+        result: dict[str, DriverBranchInfo] = {}
 
         if self._matrix_data:
             for branch, data in self._matrix_data.get("branches", {}).items():
-                result[branch] = _parse_branch_info(branch, data)
+                info = _parse_branch_info(branch, data)
+                if info is not None:
+                    result[branch] = info
 
         if not result:
             for _, info in get_br_info.__module__.__dict__.items():
@@ -147,7 +154,7 @@ class MatrixManager:
     def get_all_generations(self) -> dict[str, GPUGenerationInfo]:
         """Get all GPU generations."""
         self._ensure_matrix_loaded()
-        result = {}
+        result: dict[str, GPUGenerationInfo] = {}
 
         if self._matrix_data:
             for name, data in self._matrix_data.get("generations", {}).items():
@@ -267,7 +274,7 @@ class MatrixManager:
 
         try:
             with open(CACHE_FILE) as f:
-                data = json.load(f)
+                data = cast(dict[str, Any], json.load(f))
             data["_meta"]["is_fallback"] = False
             logger.debug("Using cached matrix")
             return data
@@ -292,7 +299,7 @@ class MatrixManager:
 
         try:
             with open(fallback_path) as f:
-                data = json.load(f)
+                data = cast(dict[str, Any], json.load(f))
             data["_meta"]["is_fallback"] = True
             return data
         except Exception as e:

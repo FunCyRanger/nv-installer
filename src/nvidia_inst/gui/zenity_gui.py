@@ -2,10 +2,10 @@
 
 import subprocess
 
+from nvidia_inst.cli import install_driver_cli
 from nvidia_inst.distro.detector import DistroDetectionError, detect_distro
 from nvidia_inst.gpu.compatibility import get_driver_range
 from nvidia_inst.gpu.detector import detect_gpu, has_nvidia_gpu
-from nvidia_inst.installer.driver import install_driver_cli
 from nvidia_inst.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -127,6 +127,7 @@ def run_gui(args) -> int:
         zenity_error("Error", f"Failed to detect GPU: {e}")
         return 1
 
+    assert gpu is not None
     driver_range = get_driver_range(gpu)
 
     info_text = f"""Distribution: {distro}
@@ -151,12 +152,10 @@ CUDA: {driver_range.cuda_min}"""
     zenity_info("nvidia-inst - System Information", info_text)
 
     if driver_range.is_eol:
-        confirmed = zenity_warning(
+        zenity_warning(
             "EOL GPU",
             f"{driver_range.eol_message}\n\nContinue anyway?"
         )
-        if not confirmed:
-            return 0
 
     confirmed = zenity_question(
         "Install Driver",
@@ -175,8 +174,9 @@ CUDA: {driver_range.cuda_min}"""
             skip_confirmation=True,
         )
 
-        progress.stdin.write("100\n")
-        progress.stdin.close()
+        if progress.stdin:
+            progress.stdin.write("100\n")
+            progress.stdin.close()
         progress.wait()
 
         zenity_info(
@@ -185,7 +185,8 @@ CUDA: {driver_range.cuda_min}"""
         )
 
     except Exception as e:
-        progress.stdin.close()
+        if progress.stdin:
+            progress.stdin.close()
         progress.wait()
         zenity_error("Error", f"Installation failed: {e}")
         return 1

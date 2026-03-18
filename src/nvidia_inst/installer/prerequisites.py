@@ -108,7 +108,7 @@ class PrerequisitesChecker:
 
     def _check_repositories(self, distro_id: str, distro_version: str) -> dict:
         """Check if required repositories are configured."""
-        repos_status = {
+        repos_status: dict[str, list[str]] = {
             "configured": [],
             "missing": [],
             "fix_commands": [],
@@ -127,7 +127,7 @@ class PrerequisitesChecker:
 
     def _check_fedora_repos(self, distro_id: str, distro_version: str) -> dict:
         """Check Fedora/RHEL repositories."""
-        repos_status = {
+        repos_status: dict[str, list[str]] = {
             "configured": [],
             "missing": [],
             "fix_commands": [],
@@ -151,7 +151,7 @@ class PrerequisitesChecker:
 
     def _check_ubuntu_repos(self, distro_id: str, distro_version: str) -> dict:
         """Check Ubuntu/Debian repositories."""
-        repos_status = {
+        repos_status: dict[str, list[str]] = {
             "configured": [],
             "missing": [],
             "fix_commands": [],
@@ -169,7 +169,7 @@ class PrerequisitesChecker:
 
     def _check_arch_repos(self) -> dict:
         """Check Arch Linux repositories."""
-        repos_status = {
+        repos_status: dict[str, list[str]] = {
             "configured": [],
             "missing": [],
             "fix_commands": [],
@@ -185,7 +185,7 @@ class PrerequisitesChecker:
 
     def _check_opensuse_repos(self) -> dict:
         """Check openSUSE repositories."""
-        repos_status = {
+        repos_status: dict[str, list[str]] = {
             "configured": [],
             "missing": [],
             "fix_commands": [],

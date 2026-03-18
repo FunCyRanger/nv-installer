@@ -3,10 +3,10 @@
 import tkinter as tk
 from tkinter import messagebox, scrolledtext, ttk
 
-from nvidia_inst.distro.detector import DistroDetectionError, detect_distro
-from nvidia_inst.gpu.compatibility import get_driver_range
-from nvidia_inst.gpu.detector import detect_gpu, has_nvidia_gpu
-from nvidia_inst.installer.driver import install_driver_cli
+from nvidia_inst.cli import install_driver_cli
+from nvidia_inst.distro.detector import DistroDetectionError, DistroInfo, detect_distro
+from nvidia_inst.gpu.compatibility import DriverRange, get_driver_range
+from nvidia_inst.gpu.detector import GPUInfo, detect_gpu, has_nvidia_gpu
 from nvidia_inst.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -20,9 +20,9 @@ class NvidiaInstGUI:
         self.root.title("nvidia-inst")
         self.root.geometry("600x550")
 
-        self.distro = None
-        self.gpu = None
-        self.driver_range = None
+        self.distro: DistroInfo | None = None
+        self.gpu: GPUInfo | None = None
+        self.driver_range: DriverRange | None = None
 
         self._setup_ui()
         self._detect_hardware()
@@ -33,7 +33,7 @@ class NvidiaInstGUI:
         style.theme_use("clam")
 
         main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        main_frame.grid(row=0, column=0, sticky="wens")
 
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
@@ -113,7 +113,7 @@ class NvidiaInstGUI:
             wrap=tk.WORD,
             font=("Courier", 9),
         )
-        self.log_text.grid(row=row + 1, column=0, sticky=(tk.W, tk.E))
+        self.log_text.grid(row=row + 1, column=0, sticky="we")
 
         parent.rowconfigure(row + 1, weight=1)
 

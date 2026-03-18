@@ -17,6 +17,7 @@ from nvidia_inst.gpu.detector import (
     detect_gpu,
     has_nvidia_gpu,
 )
+from nvidia_inst.gpu.matrix.data import GPUGenerationInfo
 from nvidia_inst.installer.driver import (
     DriverInstallError,
     check_nouveau,
@@ -648,7 +649,7 @@ def _get_wrong_branch(max_branch: str) -> str:
         "580": "590",  # Maxwell/Pascal/Volta - block 590+
         "590": None,  # Turing+ - no restrictions
     }
-    return branch_blocklist.get(max_branch, "")
+    return branch_blocklist.get(max_branch) or ""
 
 
 def _get_cuda_installer(distro_id: str):
@@ -689,18 +690,18 @@ def show_matrix_info() -> int:
         if branches:
             print("\nDriver Branches:")
             for branch in sorted(branches.keys()):
-                info = branches[branch]
-                eol = f" (EOL: {info.eol_date})" if info.eol_date else ""
-                print(f"  {branch}: {info.name} - {info.latest_version}{eol}")
+                branch_info = branches[branch]
+                eol = f" (EOL: {branch_info.eol_date})" if branch_info.eol_date else ""
+                print(f"  {branch}: {branch_info.name} - {branch_info.latest_version}{eol}")
 
         generations = manager.get_all_generations()
         if generations:
             print("\nGPU Generations:")
             for name in sorted(generations.keys()):
-                info = generations[name]
+                gen_info: GPUGenerationInfo = generations[name]
                 status_icon = {"full": "[+]", "limited": "[~]", "eol": "[-]"}
-                icon = status_icon.get(info.status.value, "[?]")
-                print(f"  {icon} {info.display_name}")
+                icon = status_icon.get(gen_info.status.value, "[?]")
+                print(f"  {icon} {gen_info.display_name}")
 
         print("\n" + "=" * 60 + "\n")
         return 0
