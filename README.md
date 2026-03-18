@@ -1,5 +1,7 @@
 # nvidia-inst
 
+> **Beta Status**: This software is in active development. Currently tested on Fedora 43 with Maxwell GPU. Contributions welcome!
+
 Cross-distribution Linux script for installing the latest compatible Nvidia driver with CUDA support.
 
 ## Features
@@ -331,6 +333,25 @@ sudo reboot
 ```bash
 sudo nvidia-inst --revert-to-nouveau
 ```
+
+## Tested Configurations
+
+| Distro | Version | GPU | Driver | Status |
+|--------|---------|-----|--------|--------|
+| Fedora | 43 | Quadro M2200 Mobile (Maxwell) | 580.126.18 | Working |
+
+### Contributing Test Results
+
+If you test on other distributions or GPUs, please report your results:
+
+- **Open an Issue**: https://github.com/FunCyRanger/nv-installer/issues
+- **Discussions**: https://github.com/FunCyRanger/nv-installer/discussions
+
+### Untested (Help Wanted)
+
+- Ubuntu, Arch, Debian, openSUSE
+- Ampere, Ada, Turing, Blackwell GPUs
+- Kepler GPUs (EOL)
 
 ## License
 
