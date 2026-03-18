@@ -154,23 +154,27 @@ class TestPackageManager:
         pm = get_package_manager()
         assert pm.__class__.__name__ == "AptManager"
 
+    @patch("nvidia_inst.distro.factory.is_ubuntu")
     @patch("nvidia_inst.distro.factory.is_arch")
     @patch("nvidia_inst.distro.factory.is_debian")
     @patch("nvidia_inst.distro.factory.is_fedora")
-    def test_get_package_manager_dnf(self, mock_is_fedora, mock_is_debian, mock_is_arch):
+    def test_get_package_manager_dnf(self, mock_is_fedora, mock_is_debian, mock_is_arch, mock_is_ubuntu):
         """Test getting DNF package manager."""
+        mock_is_ubuntu.return_value = False
         mock_is_fedora.return_value = True
         mock_is_debian.return_value = False
         mock_is_arch.return_value = False
         pm = get_package_manager()
         assert pm.__class__.__name__ == "DnfManager"
 
+    @patch("nvidia_inst.distro.factory.is_ubuntu")
     @patch("nvidia_inst.distro.factory.is_opensuse")
     @patch("nvidia_inst.distro.factory.is_fedora")
     @patch("nvidia_inst.distro.factory.is_debian")
     @patch("nvidia_inst.distro.factory.is_arch")
-    def test_get_package_manager_pacman(self, mock_is_arch, mock_is_debian, mock_is_fedora, mock_is_opensuse):
+    def test_get_package_manager_pacman(self, mock_is_arch, mock_is_debian, mock_is_fedora, mock_is_opensuse, mock_is_ubuntu):
         """Test getting Pacman package manager."""
+        mock_is_ubuntu.return_value = False
         mock_is_arch.return_value = True
         mock_is_debian.return_value = False
         mock_is_fedora.return_value = False
