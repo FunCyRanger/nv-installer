@@ -1,0 +1,188 @@
+{
+  "_meta": {
+    "version": "2026.03.18",
+    "last_updated": "2026-03-18T00:00:00Z",
+    "generator": "nvidia-inst",
+    "sources": [
+      "https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/",
+      "https://download.nvidia.com/XFree86/Linux-x86_64/",
+      "https://www.nvidia.com/en-us/drivers/unix/"
+    ]
+  },
+  "branches": {
+    "595": {
+      "name": "New Feature Branch",
+      "latest": "595.45.04",
+      "release_date": "2026-01-15",
+      "eol_date": null,
+      "gpu_generations": ["blackwell"]
+    },
+    "590": {
+      "name": "New Feature Branch",
+      "latest": "590.48.01",
+      "release_date": "2025-01-15",
+      "eol_date": "2028-08-01",
+      "gpu_generations": ["turing", "ampere", "ada", "blackwell"]
+    },
+    "580": {
+      "name": "Production Branch",
+      "latest": "580.142",
+      "release_date": "2024-10-01",
+      "eol_date": "2028-10-01",
+      "gpu_generations": ["maxwell", "pascal", "volta"]
+    },
+    "470": {
+      "name": "Legacy Branch",
+      "latest": "470.256.02",
+      "release_date": "2022-03-22",
+      "eol_date": "2025-12-31",
+      "gpu_generations": ["kepler"]
+    }
+  },
+  "generations": {
+    "blackwell": {
+      "name": "blackwell",
+      "display_name": "GeForce RTX 50 Series",
+      "compute_capability": {
+        "min": 9.0,
+        "max": 12.1
+      },
+      "cuda": {
+        "min": "12.4",
+        "max": "13.x",
+        "recommended": "12.6"
+      },
+      "branches": ["590", "595"],
+      "status": "full",
+      "min_driver": "550.127.05",
+      "max_driver": null,
+      "eol_message": null
+    },
+    "ada": {
+      "name": "ada",
+      "display_name": "GeForce RTX 40 Series, L40, L10",
+      "compute_capability": {
+        "min": 8.9,
+        "max": 8.9
+      },
+      "cuda": {
+        "min": "11.8",
+        "max": "12.8",
+        "recommended": "12.2"
+      },
+      "branches": ["590"],
+      "status": "full",
+      "min_driver": "525.60.13",
+      "max_driver": null,
+      "eol_message": null
+    },
+    "ampere": {
+      "name": "ampere",
+      "display_name": "GeForce RTX 30 Series, A100, A30, A40",
+      "compute_capability": {
+        "min": 8.0,
+        "max": 8.6
+      },
+      "cuda": {
+        "min": "11.0",
+        "max": "12.8",
+        "recommended": "12.2"
+      },
+      "branches": ["590"],
+      "status": "full",
+      "min_driver": "520.56.06",
+      "max_driver": null,
+      "eol_message": null
+    },
+    "turing": {
+      "name": "turing",
+      "display_name": "GeForce RTX 20 Series, GTX 16 Series, T4, Quadro RTX",
+      "compute_capability": {
+        "min": 7.5,
+        "max": 7.5
+      },
+      "cuda": {
+        "min": "10.0",
+        "max": "12.8",
+        "recommended": "12.2"
+      },
+      "branches": ["590"],
+      "status": "full",
+      "min_driver": "520.56.06",
+      "max_driver": null,
+      "eol_message": null
+    },
+    "volta": {
+      "name": "volta",
+      "display_name": "Tesla V100, Titan V",
+      "compute_capability": {
+        "min": 7.0,
+        "max": 7.0
+      },
+      "cuda": {
+        "min": "9.0",
+        "max": "12.8",
+        "recommended": "11.8"
+      },
+      "branches": ["580"],
+      "status": "limited",
+      "min_driver": "515.65.01",
+      "max_driver": "580.142",
+      "eol_message": "Volta uses driver branch 580.x. Will receive branch updates through October 2028."
+    },
+    "pascal": {
+      "name": "pascal",
+      "display_name": "GeForce GTX 10 Series, P100, Quadro P-series",
+      "compute_capability": {
+        "min": 6.0,
+        "max": 6.1
+      },
+      "cuda": {
+        "min": "8.0",
+        "max": "12.8",
+        "recommended": "11.8"
+      },
+      "branches": ["580"],
+      "status": "limited",
+      "min_driver": "450.191.0",
+      "max_driver": "580.142",
+      "eol_message": "Pascal uses driver branch 580.x. Will receive branch updates through October 2028."
+    },
+    "maxwell": {
+      "name": "maxwell",
+      "display_name": "GeForce GTX 900 Series, GTX 750 Series, M-series, Quadro M",
+      "compute_capability": {
+        "min": 5.0,
+        "max": 5.2
+      },
+      "cuda": {
+        "min": "7.5",
+        "max": "12.8",
+        "recommended": "11.8"
+      },
+      "branches": ["580"],
+      "status": "limited",
+      "min_driver": "450.191.0",
+      "max_driver": "580.142",
+      "eol_message": "Maxwell uses driver branch 580.x. Will receive branch updates through October 2028."
+    },
+    "kepler": {
+      "name": "kepler",
+      "display_name": "GeForce GTX 600/700 Series, K-series",
+      "compute_capability": {
+        "min": 3.0,
+        "max": 3.7
+      },
+      "cuda": {
+        "min": "7.5",
+        "max": "9.0",
+        "recommended": "9.0"
+      },
+      "branches": ["470"],
+      "status": "eol",
+      "min_driver": "390.157.0",
+      "max_driver": "470.256.02",
+      "eol_message": "Kepler is end-of-life. Maximum supported driver: 470.256.02 (security updates only)."
+    }
+  }
+}

@@ -1,0 +1,28 @@
+#!/bin/bash
+#
+# nv-install - Simple wrapper for nvidia-inst
+#
+# Usage:
+#   nv-install --dry-run          # Simulate installation
+#   nv-install --check            # Check compatibility
+#   nv-install                    # Interactive install
+#   nv-install --gui              # GUI mode
+#   sudo nv-install              # Actual installation
+#
+# Options:
+#   --dry-run, --simulate        Show what would be installed
+#   --check                      Check compatibility only
+#   --gui                        Launch GUI (Tkinter or Zenity)
+#   --gui-type {tkinter,zenity} Force specific GUI
+#   --driver-version VERSION     Install specific driver version
+#   --no-cuda                    Install driver without CUDA
+#   --yes, -y                    Skip confirmation prompts
+#   --debug                      Enable debug logging
+#   --version                    Show version
+#   --help                       Show this help message
+#
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PYTHONPATH="$SCRIPT_DIR/src"
+
+exec python3 -m nvidia_inst.cli "$@"
