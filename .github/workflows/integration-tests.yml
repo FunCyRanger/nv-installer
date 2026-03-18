@@ -1,0 +1,124 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  fedora:
+    name: Fedora
+    runs-on: ubuntu-latest
+    container: fedora:rawhide
+    steps:
+      - name: Install system dependencies
+        run: dnf install -y python3 python3-pip git
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install package
+        run: pip3 install -e ".[dev]"
+
+      - name: Run DNF package manager tests
+        run: python3 -m pytest tests/test_dnf.py -v
+
+      - name: Run distro detection tests
+        run: python3 -m pytest tests/test_distro.py -v
+
+  ubuntu:
+    name: Ubuntu
+    runs-on: ubuntu-latest
+    container: ubuntu:24.04
+    steps:
+      - name: Install system dependencies
+        run: |
+          apt-get update
+          apt-get install -y python3 python3-pip git
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install package
+        run: pip3 install -e ".[dev]"
+
+      - name: Run APT package manager tests
+        run: python3 -m pytest tests/test_apt.py -v
+
+      - name: Run distro detection tests
+        run: python3 -m pytest tests/test_distro.py -v
+
+  arch:
+    name: Arch Linux
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install system dependencies
+        run: pacman -Sy --noconfirm python python-pip git
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install package
+        run: pip3 install -e ".[dev]"
+
+      - name: Run Pacman package manager tests
+        run: python3 -m pytest tests/test_pacman.py -v
+
+  opensuse:
+    name: openSUSE
+    runs-on: ubuntu-latest
+    container: opensuse/leap:latest
+    steps:
+      - name: Install system dependencies
+        run: zypper install -y python3 python3-pip git
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install package
+        run: pip3 install -e ".[dev]"
+
+      - name: Run Zypper package manager tests
+        run: python3 -m pytest tests/test_zypper.py -v
+
+  matrix:
+    name: Matrix System
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install package
+        run: pip3 install -e ".[dev]"
+
+      - name: Run matrix tests
+        run: python3 -m pytest tests/test_matrix.py -v
+
+      - name: Run compatibility tests
+        run: python3 -m pytest tests/test_compatibility.py -v
+
+  uninstaller:
+    name: Uninstaller Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install package
+        run: pip3 install -e ".[dev]"
+
+      - name: Run uninstaller tests
+        run: python3 -m pytest tests/test_uninstaller.py -v
