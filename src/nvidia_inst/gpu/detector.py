@@ -3,7 +3,6 @@
 import re
 import subprocess
 from dataclasses import dataclass
-from typing import Optional
 
 from nvidia_inst.utils.logger import get_logger
 
@@ -15,11 +14,11 @@ class GPUInfo:
     """Information about an Nvidia GPU."""
 
     model: str
-    vram: Optional[str] = None
-    compute_capability: Optional[float] = None
-    driver_version: Optional[str] = None
-    cuda_version: Optional[str] = None
-    generation: Optional[str] = None
+    vram: str | None = None
+    compute_capability: float | None = None
+    driver_version: str | None = None
+    cuda_version: str | None = None
+    generation: str | None = None
 
     def __str__(self) -> str:
         return self.model
@@ -66,7 +65,7 @@ GPU_PATTERNS = [
 ]
 
 
-def detect_gpu() -> Optional[GPUInfo]:
+def detect_gpu() -> GPUInfo | None:
     """Detect Nvidia GPU using nvidia-smi.
 
     Returns:
@@ -118,7 +117,7 @@ def _nvidia_smi_available() -> bool:
     return shutil.which("nvidia-smi") is not None
 
 
-def _detect_gpu_lspci() -> Optional[GPUInfo]:
+def _detect_gpu_lspci() -> GPUInfo | None:
     """Detect Nvidia GPU using lspci fallback."""
     try:
         result = subprocess.run(
@@ -147,7 +146,7 @@ def _detect_gpu_lspci() -> Optional[GPUInfo]:
         raise GPUDetectionError("Cannot detect GPU") from e
 
 
-def _parse_lspci_gpu(line: str) -> Optional[str]:
+def _parse_lspci_gpu(line: str) -> str | None:
     """Parse GPU model from lspci output."""
     match = re.search(r"NVIDIA Corporation ([A-Za-z0-9]+)", line, re.IGNORECASE)
     if match:
@@ -226,10 +225,8 @@ def _get_friendly_gpu_name(model_code: str) -> str:
     return gpu_names.get(model_code, f"Nvidia {model_code}")
 
 
-def _get_gpu_generation(gpu_model: str) -> Optional[str]:
+def _get_gpu_generation(gpu_model: str) -> str | None:
     """Determine GPU generation from model name."""
-    gpu_lower = gpu_model.lower()
-
     for pattern, generation, _ in GPU_PATTERNS:
         if re.search(pattern, gpu_model, re.IGNORECASE):
             return generation
@@ -237,7 +234,7 @@ def _get_gpu_generation(gpu_model: str) -> Optional[str]:
     return "unknown"
 
 
-def _get_compute_capability(generation: Optional[str]) -> Optional[float]:
+def _get_compute_capability(generation: str | None) -> float | None:
     """Get compute capability for a GPU generation."""
     if not generation:
         return None
@@ -280,7 +277,7 @@ def has_nvidia_gpu() -> bool:
         return False
 
 
-def get_current_driver_version() -> Optional[str]:
+def get_current_driver_version() -> str | None:
     """Get the currently installed Nvidia driver version.
 
     Returns:

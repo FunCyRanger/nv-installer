@@ -2,8 +2,8 @@
 
 import logging
 import sys
-from pathlib import Path
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 LOG_DIR = Path("/var/log/nvidia-inst")
 LOG_FILE = LOG_DIR / "install.log"

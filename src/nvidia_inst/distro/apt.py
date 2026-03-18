@@ -1,7 +1,6 @@
 """APT package manager implementation for Debian/Ubuntu."""
 
 import subprocess
-from typing import Optional
 
 from nvidia_inst.distro.package_manager import PackageManager, PackageManagerError
 from nvidia_inst.utils.logger import get_logger
@@ -90,7 +89,7 @@ class AptManager(PackageManager):
         import shutil
         return shutil.which(self._apt_path) is not None
 
-    def get_installed_version(self, package: str) -> Optional[str]:
+    def get_installed_version(self, package: str) -> str | None:
         """Get installed version of a package."""
         try:
             result = subprocess.run(
@@ -103,7 +102,7 @@ class AptManager(PackageManager):
         except subprocess.CalledProcessError:
             return None
 
-    def get_available_version(self, package: str) -> Optional[str]:
+    def get_available_version(self, package: str) -> str | None:
         """Get available version of a package."""
         try:
             result = subprocess.run(
@@ -113,7 +112,7 @@ class AptManager(PackageManager):
                 text=True,
             )
             lines = result.stdout.splitlines()
-            for i, line in enumerate(lines):
+            for line in lines:
                 if "Candidate:" in line:
                     version = line.split(":")[1].strip()
                     if version != "(none)":
@@ -158,7 +157,6 @@ Pin-Priority: 1001
                     parts = line.split("|")
                     if len(parts) >= 2:
                         version = parts[1].strip()
-                        major = version.split(".")[0] if "." in version else version.split("-")[0]
                         if version not in seen:
                             versions.append(version)
                             seen.add(version)

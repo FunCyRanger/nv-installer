@@ -2,23 +2,23 @@
 
 import hashlib
 import json
-import logging
-import os
 import re
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from nvidia_inst.gpu.matrix.data import (
-    CUDARange,
     ComputeCapability,
+    CUDARange,
     DriverBranchInfo,
     GPUGenerationInfo,
-    MatrixMeta,
     SupportStatus,
-    get_generation_info as get_gen_info,
+)
+from nvidia_inst.gpu.matrix.data import (
     get_branch_info as get_br_info,
+)
+from nvidia_inst.gpu.matrix.data import (
+    get_generation_info as get_gen_info,
 )
 from nvidia_inst.utils.logger import get_logger
 
@@ -45,7 +45,7 @@ class MatrixManager:
             force_update: If True, bypass cache and fetch fresh data.
         """
         self._force_update = force_update
-        self._matrix_data: Optional[dict] = None
+        self._matrix_data: dict | None = None
         self._is_online: bool = False
         self._update_performed: bool = False
 
@@ -78,7 +78,7 @@ class MatrixManager:
         """Check if using fallback data."""
         return self._matrix_data is not None and self._matrix_data.get("_meta", {}).get("is_fallback", False)
 
-    def get_last_update_time(self) -> Optional[str]:
+    def get_last_update_time(self) -> str | None:
         """Get when matrix was last updated."""
         if self._matrix_data:
             return self._matrix_data.get("_meta", {}).get("last_updated")
@@ -90,7 +90,7 @@ class MatrixManager:
             return self._matrix_data.get("_meta", {}).get("version", "unknown")
         return "unknown"
 
-    def get_generation_info(self, generation: str) -> Optional[GPUGenerationInfo]:
+    def get_generation_info(self, generation: str) -> GPUGenerationInfo | None:
         """Get compatibility info for a GPU generation.
 
         Args:
@@ -109,7 +109,7 @@ class MatrixManager:
 
         return _parse_generation_info(gen_data)
 
-    def get_branch_info(self, branch: str) -> Optional[DriverBranchInfo]:
+    def get_branch_info(self, branch: str) -> DriverBranchInfo | None:
         """Get info for a driver branch.
 
         Args:
@@ -138,7 +138,7 @@ class MatrixManager:
                 result[branch] = _parse_branch_info(branch, data)
 
         if not result:
-            for branch, info in get_br_info.__module__.__dict__.items():
+            for _, info in get_br_info.__module__.__dict__.items():
                 if isinstance(info, DriverBranchInfo):
                     result[info.number] = info
 
@@ -156,7 +156,7 @@ class MatrixManager:
                     result[name] = info
 
         if not result:
-            for name, info in get_gen_info.__module__.__dict__.items():
+            for _, info in get_gen_info.__module__.__dict__.items():
                 if isinstance(info, GPUGenerationInfo):
                     result[info.name] = info
 
@@ -195,7 +195,7 @@ class MatrixManager:
         self._is_online = False
         self._update_performed = False
 
-    def _fetch_online_matrix(self) -> Optional[dict]:
+    def _fetch_online_matrix(self) -> dict | None:
         """Fetch fresh matrix data from Nvidia archive.
 
         Returns:
@@ -255,7 +255,7 @@ class MatrixManager:
         except Exception as e:
             raise MatrixUpdateError(f"Failed to fetch online matrix: {e}") from e
 
-    def _load_from_cache(self) -> Optional[dict]:
+    def _load_from_cache(self) -> dict | None:
         """Load matrix from local cache."""
         if not CACHE_FILE.exists():
             return None
@@ -307,7 +307,7 @@ class MatrixManager:
         logger.debug("Matrix cache invalidated")
 
 
-def _parse_generation_info(data: dict) -> Optional[GPUGenerationInfo]:
+def _parse_generation_info(data: dict) -> GPUGenerationInfo | None:
     """Parse generation data into GPUGenerationInfo."""
     try:
         cuda_data = data.get("cuda", {})
@@ -342,7 +342,7 @@ def _parse_generation_info(data: dict) -> Optional[GPUGenerationInfo]:
         return None
 
 
-def _parse_branch_info(branch: str, data: dict) -> Optional[DriverBranchInfo]:
+def _parse_branch_info(branch: str, data: dict) -> DriverBranchInfo | None:
     """Parse branch data into DriverBranchInfo."""
     try:
         return DriverBranchInfo(

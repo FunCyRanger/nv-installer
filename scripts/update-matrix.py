@@ -86,9 +86,7 @@ def fetch_driver_versions() -> dict[str, str]:
         for version in versions:
             major = version[0]
             full_version = f"{version[0]}.{version[1]}.{version[2]}"
-            if major not in branch_versions:
-                branch_versions[major] = full_version
-            elif _compare_versions(full_version, branch_versions[major]) > 0:
+            if major not in branch_versions or _compare_versions(full_version, branch_versions[major]) > 0:
                 branch_versions[major] = full_version
 
         print(f"Found {len(branch_versions)} driver branches")
@@ -262,7 +260,7 @@ def update_matrix(
     with open(matrix_path, "w") as f:
         json.dump(data, f, indent=2)
 
-    print(f"\nMatrix updated successfully!")
+    print("\nMatrix updated successfully!")
     print(f"New version: {data['_meta']['version']}")
     return True
 

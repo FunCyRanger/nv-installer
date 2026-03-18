@@ -4,7 +4,6 @@ import os
 import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
 
 from nvidia_inst.gpu.compatibility import DriverRange
 from nvidia_inst.utils.logger import get_logger
@@ -49,7 +48,7 @@ class DistroInstaller(ABC):
     """Abstract base class for distro-specific installers."""
 
     @abstractmethod
-    def get_driver_packages(self, driver_version: Optional[str] = None) -> list[str]:
+    def get_driver_packages(self, driver_version: str | None = None) -> list[str]:
         """Get list of driver packages to install.
 
         Args:
@@ -61,7 +60,7 @@ class DistroInstaller(ABC):
         ...
 
     @abstractmethod
-    def get_cuda_packages(self, cuda_version: Optional[str] = None) -> list[str]:
+    def get_cuda_packages(self, cuda_version: str | None = None) -> list[str]:
         """Get list of CUDA packages to install.
 
         Args:
@@ -191,9 +190,9 @@ def disable_nouveau() -> bool:
 
 def install_driver(
     installer: DistroInstaller,
-    driver_version: Optional[str] = None,
+    driver_version: str | None = None,
     with_cuda: bool = True,
-    cuda_version: Optional[str] = None,
+    cuda_version: str | None = None,
 ) -> InstallResult:
     """Install Nvidia driver.
 

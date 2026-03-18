@@ -1,7 +1,6 @@
 """CUDA toolkit installation."""
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from nvidia_inst.utils.logger import get_logger
 
@@ -12,7 +11,7 @@ class CUDAInstaller(ABC):
     """Abstract base class for CUDA installation."""
 
     @abstractmethod
-    def get_cuda_packages(self, version: Optional[str] = None) -> list[str]:
+    def get_cuda_packages(self, version: str | None = None) -> list[str]:
         """Get CUDA packages for installation.
 
         Args:
@@ -33,7 +32,7 @@ class CUDAInstaller(ABC):
         ...
 
     @abstractmethod
-    def get_installed_cuda_version(self) -> Optional[str]:
+    def get_installed_cuda_version(self) -> str | None:
         """Get currently installed CUDA version.
 
         Returns:
@@ -45,7 +44,7 @@ class CUDAInstaller(ABC):
 class UbuntuCUDAInstaller(CUDAInstaller):
     """CUDA installer for Ubuntu/Debian."""
 
-    def get_cuda_packages(self, version: Optional[str] = None) -> list[str]:
+    def get_cuda_packages(self, version: str | None = None) -> list[str]:
         """Get CUDA packages for Ubuntu."""
         if version:
             return [
@@ -71,7 +70,7 @@ class UbuntuCUDAInstaller(CUDAInstaller):
         except FileNotFoundError:
             return False
 
-    def get_installed_cuda_version(self) -> Optional[str]:
+    def get_installed_cuda_version(self) -> str | None:
         """Get installed CUDA version."""
         import subprocess
         try:
@@ -94,7 +93,7 @@ class UbuntuCUDAInstaller(CUDAInstaller):
 class FedoraCUDAInstaller(CUDAInstaller):
     """CUDA installer for Fedora/RHEL."""
 
-    def get_cuda_packages(self, version: Optional[str] = None) -> list[str]:
+    def get_cuda_packages(self, version: str | None = None) -> list[str]:
         """Get CUDA packages for Fedora."""
         if version:
             return [
@@ -117,7 +116,7 @@ class FedoraCUDAInstaller(CUDAInstaller):
         except FileNotFoundError:
             return False
 
-    def get_installed_cuda_version(self) -> Optional[str]:
+    def get_installed_cuda_version(self) -> str | None:
         """Get installed CUDA version."""
         import subprocess
         try:
@@ -140,7 +139,7 @@ class FedoraCUDAInstaller(CUDAInstaller):
 class ArchCUDAInstaller(CUDAInstaller):
     """CUDA installer for Arch Linux."""
 
-    def get_cuda_packages(self, version: Optional[str] = None) -> list[str]:
+    def get_cuda_packages(self, version: str | None = None) -> list[str]:
         """Get CUDA packages for Arch."""
         if version:
             return [f"cuda-{version}"]
@@ -160,7 +159,7 @@ class ArchCUDAInstaller(CUDAInstaller):
         except FileNotFoundError:
             return False
 
-    def get_installed_cuda_version(self) -> Optional[str]:
+    def get_installed_cuda_version(self) -> str | None:
         """Get installed CUDA version."""
         import subprocess
         try:

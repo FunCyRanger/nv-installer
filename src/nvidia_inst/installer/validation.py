@@ -1,9 +1,8 @@
+import glob
+import os
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
-import subprocess
-import os
-import glob
 
 
 @dataclass
@@ -21,12 +20,12 @@ class ValidationResult:
     kernel_module_built: bool
     nouveau_blocked: bool
     nvidia_smi_works: bool
-    actual_driver_version: Optional[str]
+    actual_driver_version: str | None
     warnings: list[str]
     errors: list[str]
 
 
-def unblock_nouveau() -> Tuple[bool, str]:
+def unblock_nouveau() -> tuple[bool, str]:
     """Remove Nouveau blacklist to ensure bootable system.
 
     Returns:

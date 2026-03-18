@@ -1,7 +1,6 @@
 """Pacman package manager implementation for Arch Linux."""
 
 import subprocess
-from typing import Optional
 
 from nvidia_inst.distro.package_manager import PackageManager, PackageManagerError
 from nvidia_inst.utils.logger import get_logger
@@ -90,7 +89,7 @@ class PacmanManager(PackageManager):
         import shutil
         return shutil.which(self._pacman_path) is not None
 
-    def get_installed_version(self, package: str) -> Optional[str]:
+    def get_installed_version(self, package: str) -> str | None:
         """Get installed version of a package."""
         try:
             result = subprocess.run(
@@ -106,7 +105,7 @@ class PacmanManager(PackageManager):
         except subprocess.CalledProcessError:
             return None
 
-    def get_available_version(self, package: str) -> Optional[str]:
+    def get_available_version(self, package: str) -> str | None:
         """Get available version of a package."""
         try:
             result = subprocess.run(
@@ -130,7 +129,7 @@ class PacmanManager(PackageManager):
 
     def get_all_versions(self, package: str) -> list[str]:
         """Get available nvidia driver branch packages for Arch Linux.
-        
+
         For Arch, nvidia drivers are delivered as branch packages, not versioned.
         This returns the available branch packages that match the base package.
         """
@@ -143,16 +142,16 @@ class PacmanManager(PackageManager):
             "akmod-nvidia-470xx": ["akmod-nvidia-470xx"],
             "akmod-nvidia-535xx": ["akmod-nvidia-535xx"],
         }
-        
+
         available_branches = []
-        
+
         for branch, pkgs in branch_packages.items():
             for pkg in pkgs:
                 if self._package_exists(pkg):
                     available_branches.append(branch)
                     break
-        
-        return sorted(list(set(available_branches)))
+
+        return sorted(set(available_branches))
 
     def _package_exists(self, package: str) -> bool:
         """Check if a package exists in the repos."""

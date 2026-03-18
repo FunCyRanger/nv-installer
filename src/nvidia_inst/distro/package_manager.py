@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
 
 from nvidia_inst.utils.logger import get_logger
 
@@ -20,7 +19,7 @@ class PackageInfo:
 
     name: str
     version: str
-    available_version: Optional[str] = None
+    available_version: str | None = None
     installed: bool = False
 
 
@@ -91,7 +90,7 @@ class PackageManager(ABC):
         ...
 
     @abstractmethod
-    def get_installed_version(self, package: str) -> Optional[str]:
+    def get_installed_version(self, package: str) -> str | None:
         """Get installed version of a package.
 
         Args:
@@ -103,7 +102,7 @@ class PackageManager(ABC):
         ...
 
     @abstractmethod
-    def get_available_version(self, package: str) -> Optional[str]:
+    def get_available_version(self, package: str) -> str | None:
         """Get available version of a package.
 
         Args:

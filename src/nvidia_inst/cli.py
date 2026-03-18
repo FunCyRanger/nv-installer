@@ -2,33 +2,39 @@
 
 import argparse
 import sys
-from typing import Any, Optional
+from typing import Any
 
 from nvidia_inst.distro.detector import (
-    detect_distro,
     DistroDetectionError,
     DistroInfo,
+    detect_distro,
 )
 from nvidia_inst.distro.factory import get_package_manager
+from nvidia_inst.gpu.compatibility import DriverRange, get_driver_range
 from nvidia_inst.gpu.detector import (
-    detect_gpu,
     GPUDetectionError,
     GPUInfo,
+    detect_gpu,
     has_nvidia_gpu,
 )
-from nvidia_inst.gpu.compatibility import get_driver_range, DriverRange
 from nvidia_inst.installer.driver import (
+    DriverInstallError,
     check_nouveau,
     check_secure_boot,
     disable_nouveau,
-    DriverInstallError,
-    InstallResult,
     get_compatible_driver_packages,
 )
 from nvidia_inst.installer.prerequisites import PrerequisitesChecker
-from nvidia_inst.installer.validation import pre_install_check, post_install_validate, unblock_nouveau
-from nvidia_inst.installer.uninstaller import revert_to_nouveau, check_nvidia_packages_installed
-from nvidia_inst.utils.logger import setup_logging, get_logger
+from nvidia_inst.installer.uninstaller import (
+    check_nvidia_packages_installed,
+    revert_to_nouveau,
+)
+from nvidia_inst.installer.validation import (
+    post_install_validate,
+    pre_install_check,
+    unblock_nouveau,
+)
+from nvidia_inst.utils.logger import get_logger, setup_logging
 
 logger = get_logger(__name__)
 
@@ -178,36 +184,36 @@ def print_compatibility_info(
     print(" System Compatibility Check")
     print("=" * 50)
 
-    print(f"\nDistribution:")
+    print("\nDistribution:")
     print(f"  {distro}")
 
-    print(f"\nGPU:")
+    print("\nGPU:")
     print(f"  {gpu.model}")
     if gpu.compute_capability:
         print(f"  Compute Capability: {gpu.compute_capability}")
     if gpu.vram:
         print(f"  VRAM: {gpu.vram}")
 
-    print(f"\nCompatible Driver:")
+    print("\nCompatible Driver:")
     if driver_range.max_version:
         print(f"  {driver_range.min_version} - {driver_range.max_version}")
     else:
         print(f"  {driver_range.min_version} or later")
 
-    print(f"\nCUDA Support:")
+    print("\nCUDA Support:")
     if driver_range.cuda_max:
         print(f"  {driver_range.cuda_min} - {driver_range.cuda_max}")
     else:
         print(f"  {driver_range.cuda_min} or later")
 
-    print(f"\nStatus:")
+    print("\nStatus:")
     print(f"  {'Compatible' if not driver_range.is_eol else 'Limited (EOL GPU)'}")
 
 
 def check_prerequisites(
     distro_id: str,
     distro_version: str = "",
-    driver_range: Optional[Any] = None,
+    driver_range: Any | None = None,
     fix: bool = False,
 ) -> int:
     """Check system prerequisites for driver installation.
@@ -321,9 +327,9 @@ def print_version_check(version_check: Any, driver_range: Any) -> None:
 
 
 def install_driver_cli(
-    driver_version: Optional[str] = None,
+    driver_version: str | None = None,
     with_cuda: bool = True,
-    cuda_version: Optional[str] = None,
+    cuda_version: str | None = None,
     skip_confirmation: bool = False,
     dry_run: bool = False,
 ) -> int:
@@ -466,7 +472,7 @@ def install_driver_cli(
                 nouveau_disabled = False
             else:
                 print(f"  ✗ Could not re-enable Nouveau: {message}")
-                print(f"  Manual fix: sudo rm /etc/modprobe.d/blacklist-nouveau.conf")
+                print("  Manual fix: sudo rm /etc/modprobe.d/blacklist-nouveau.conf")
 
         # ALWAYS prompt for reboot
         if nouveau_disabled:
@@ -492,9 +498,9 @@ def _run_dry_run(
     distro: DistroInfo,
     gpu: GPUInfo,
     driver_range: DriverRange,
-    driver_version: Optional[str],
+    driver_version: str | None,
     with_cuda: bool,
-    cuda_version: Optional[str],
+    cuda_version: str | None,
 ) -> int:
     """Run in dry-run mode to show what would be installed."""
     from nvidia_inst.distro.factory import get_package_manager
@@ -565,7 +571,7 @@ def _run_dry_run(
     print("\n--- Commands to Execute ---")
 
     # Step 1: Update package lists first
-    print(f"# Step 1: Update package lists:")
+    print("# Step 1: Update package lists:")
     if distro.id in ("ubuntu", "debian"):
         print("  sudo apt update")
     elif distro.id in ("fedora", "rhel", "centos"):
@@ -579,16 +585,16 @@ def _run_dry_run(
     if driver_range.max_branch and driver_range.is_limited:
         wrong_branch = _get_wrong_branch(driver_range.max_branch)
         if wrong_branch:
-            print(f"\n# Step 2: BLOCK wrong driver branch (IMPORTANT!):")
+            print("\n# Step 2: BLOCK wrong driver branch (IMPORTANT!):")
             if distro.id in ("fedora", "rhel", "centos"):
                 print(f"  # Block {wrong_branch}.xx drivers - these are incompatible with your GPU!")
                 print(f"  sudo dnf versionlock add '*{wrong_branch}.*' || true")
             elif distro.id in ("ubuntu", "debian"):
                 print(f"  # Block {wrong_branch}.xx drivers in /etc/apt/preferences.d/")
-                print(f"  # This prevents installing incompatible drivers!")
+                print("  # This prevents installing incompatible drivers!")
 
     # Step 3: Install driver packages (now done before reboot)
-    print(f"\n# Step 3: Install driver packages:")
+    print("\n# Step 3: Install driver packages:")
     if distro.id in ("ubuntu", "debian"):
         cmd = f"  sudo apt install -y {' '.join(packages)}"
         print(cmd)
@@ -605,7 +611,7 @@ def _run_dry_run(
     # Step 4: Lock driver to branch
     if driver_range.max_branch and driver_range.is_limited:
         if driver_range.is_eol:
-            print(f"\n# Step 4: Lock driver to exact version (EOL GPU):")
+            print("\n# Step 4: Lock driver to exact version (EOL GPU):")
             if distro.id in ("ubuntu", "debian"):
                 print(f"  # Pin nvidia-driver to {driver_range.max_version}")
             elif distro.id in ("fedora", "rhel", "centos"):
@@ -681,7 +687,7 @@ def show_matrix_info() -> int:
 
         branches = manager.get_all_branches()
         if branches:
-            print(f"\nDriver Branches:")
+            print("\nDriver Branches:")
             for branch in sorted(branches.keys()):
                 info = branches[branch]
                 eol = f" (EOL: {info.eol_date})" if info.eol_date else ""
@@ -689,7 +695,7 @@ def show_matrix_info() -> int:
 
         generations = manager.get_all_generations()
         if generations:
-            print(f"\nGPU Generations:")
+            print("\nGPU Generations:")
             for name in sorted(generations.keys()):
                 info = generations[name]
                 status_icon = {"full": "[+]", "limited": "[~]", "eol": "[-]"}
@@ -713,7 +719,7 @@ def update_matrix_cli() -> int:
         updated, message = manager.check_for_updates()
 
         if updated:
-            print(f"\nMatrix updated successfully!")
+            print("\nMatrix updated successfully!")
             print(f"Version: {manager.get_version()}")
         else:
             print(f"\nMatrix update: {message}")
@@ -772,12 +778,12 @@ def revert_to_nouveau_cli() -> int:
     print(f"\n{result.message}")
 
     if result.packages_removed:
-        print(f"\nRemoved packages:")
+        print("\nRemoved packages:")
         for pkg in result.packages_removed[:10]:
             print(f"  - {pkg}")
 
     if result.errors:
-        print(f"\nErrors:")
+        print("\nErrors:")
         for err in result.errors:
             print(f"  - {err}")
 
@@ -858,7 +864,7 @@ def launch_gui(args: argparse.Namespace) -> int:
     return 1
 
 
-def detect_gui_type() -> Optional[str]:
+def detect_gui_type() -> str | None:
     """Detect available GUI type.
 
     Returns:
@@ -870,10 +876,12 @@ def detect_gui_type() -> Optional[str]:
         return "zenity"
 
     try:
-        import tkinter
-        return "tkinter"
+        import importlib.util
+        if importlib.util.find_spec("tkinter"):
+            return "tkinter"
     except ImportError:
-        return None
+        pass
+    return None
 
 
 if __name__ == "__main__":

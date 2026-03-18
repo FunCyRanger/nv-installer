@@ -2,7 +2,6 @@
 
 import subprocess
 from dataclasses import dataclass
-from typing import Optional
 
 from nvidia_inst.utils.logger import get_logger
 

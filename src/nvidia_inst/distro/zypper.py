@@ -1,7 +1,6 @@
 """Zypper package manager implementation for openSUSE."""
 
 import subprocess
-from typing import Optional
 
 from nvidia_inst.distro.package_manager import PackageManager, PackageManagerError
 from nvidia_inst.utils.logger import get_logger
@@ -92,7 +91,7 @@ class ZypperManager(PackageManager):
         import shutil
         return shutil.which(self._zypper_path) is not None
 
-    def get_installed_version(self, package: str) -> Optional[str]:
+    def get_installed_version(self, package: str) -> str | None:
         """Get installed version of a package."""
         try:
             result = subprocess.run(
@@ -108,7 +107,7 @@ class ZypperManager(PackageManager):
         except subprocess.CalledProcessError:
             return None
 
-    def get_available_version(self, package: str) -> Optional[str]:
+    def get_available_version(self, package: str) -> str | None:
         """Get available version of a package."""
         try:
             result = subprocess.run(

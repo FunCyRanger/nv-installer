@@ -1,7 +1,7 @@
 """Tests for the installer module."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 from nvidia_inst.installer.driver import (
     check_nouveau,
     check_secure_boot,

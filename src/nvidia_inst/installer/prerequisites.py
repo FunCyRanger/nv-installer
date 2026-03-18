@@ -1,10 +1,8 @@
 """Prerequisite checking for driver installation."""
 
 import subprocess
-import shutil
-from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional
+from pathlib import Path
 
 from nvidia_inst.gpu.compatibility import DriverRange
 from nvidia_inst.installer.version_checker import VersionChecker, VersionCheckResult
@@ -24,7 +22,7 @@ class PrerequisitesResult:
     repos_missing: list[str] = field(default_factory=list)
     driver_packages_available: bool = False
     driver_packages: list[str] = field(default_factory=list)
-    version_check: Optional[VersionCheckResult] = None
+    version_check: VersionCheckResult | None = None
     fix_commands: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
@@ -40,7 +38,7 @@ class PrerequisitesChecker:
         self,
         distro_id: str,
         distro_version: str = "",
-        driver_range: Optional[DriverRange] = None,
+        driver_range: DriverRange | None = None,
     ) -> PrerequisitesResult:
         """Run all prerequisite checks.
 
@@ -59,7 +57,7 @@ class PrerequisitesChecker:
         result.package_manager = pm_name
 
         if not pm_available:
-            result.errors.append(f"Package manager not available")
+            result.errors.append("Package manager not available")
             return result
 
         repos_status = self._check_repositories(distro_id, distro_version)

@@ -1,18 +1,17 @@
 """Factory function to get the appropriate package manager."""
 
 from nvidia_inst.distro.apt import AptManager
+from nvidia_inst.distro.detector import (
+    is_arch,
+    is_debian,
+    is_fedora,
+    is_opensuse,
+    is_ubuntu,
+)
 from nvidia_inst.distro.dnf import DnfManager
 from nvidia_inst.distro.package_manager import PackageManager
 from nvidia_inst.distro.pacman import PacmanManager
 from nvidia_inst.distro.zypper import ZypperManager
-from nvidia_inst.distro.detector import (
-    detect_distro,
-    is_ubuntu,
-    is_fedora,
-    is_arch,
-    is_debian,
-    is_opensuse,
-)
 from nvidia_inst.utils.logger import get_logger
 
 logger = get_logger(__name__)

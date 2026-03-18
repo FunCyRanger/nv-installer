@@ -1,13 +1,11 @@
 """Tkinter GUI implementation."""
 
-import sys
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext
-from typing import Optional
+from tkinter import messagebox, scrolledtext, ttk
 
-from nvidia_inst.distro.detector import detect_distro, DistroDetectionError
+from nvidia_inst.distro.detector import DistroDetectionError, detect_distro
+from nvidia_inst.gpu.compatibility import get_driver_range
 from nvidia_inst.gpu.detector import detect_gpu, has_nvidia_gpu
-from nvidia_inst.gpu.compatibility import get_driver_range, DriverRange
 from nvidia_inst.installer.driver import install_driver_cli
 from nvidia_inst.utils.logger import get_logger
 
@@ -229,6 +227,6 @@ def run_gui(args) -> int:
         Exit code.
     """
     root = tk.Tk()
-    app = NvidiaInstGUI(root)
+    NvidiaInstGUI(root)
     root.mainloop()
     return 0

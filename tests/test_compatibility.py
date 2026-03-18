@@ -1,13 +1,11 @@
 """Tests for compatibility checking."""
 
-import pytest
 from nvidia_inst.gpu.compatibility import (
+    format_driver_version,
     get_driver_range,
+    get_latest_driver,
     get_max_driver_version,
     is_driver_compatible,
-    get_latest_driver,
-    format_driver_version,
-    DriverRange,
 )
 from nvidia_inst.gpu.detector import GPUInfo
 

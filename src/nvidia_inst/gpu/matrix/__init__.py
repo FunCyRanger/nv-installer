@@ -11,10 +11,10 @@ Usage:
 """
 
 from nvidia_inst.gpu.matrix.data import (
-    CUDARange,
     ComputeCapability,
-    GPUGenerationInfo,
+    CUDARange,
     DriverBranchInfo,
+    GPUGenerationInfo,
     MatrixMeta,
     SupportStatus,
 )

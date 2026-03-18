@@ -1,11 +1,10 @@
 """Zenity GUI implementation."""
 
 import subprocess
-from typing import Optional
 
-from nvidia_inst.distro.detector import detect_distro, DistroDetectionError
+from nvidia_inst.distro.detector import DistroDetectionError, detect_distro
+from nvidia_inst.gpu.compatibility import get_driver_range
 from nvidia_inst.gpu.detector import detect_gpu, has_nvidia_gpu
-from nvidia_inst.gpu.compatibility import get_driver_range, DriverRange
 from nvidia_inst.installer.driver import install_driver_cli
 from nvidia_inst.utils.logger import get_logger
 
@@ -73,7 +72,7 @@ def zenity_progress(
     )
 
 
-def zenity_entry(title: str, text: str, hidden: bool = False) -> Optional[str]:
+def zenity_entry(title: str, text: str, hidden: bool = False) -> str | None:
     """Show entry dialog.
 
     Returns:

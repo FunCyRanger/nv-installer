@@ -1,14 +1,13 @@
 """Tests for GPU detection."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 from nvidia_inst.gpu.detector import (
-    detect_gpu,
-    GPUInfo,
-    has_nvidia_gpu,
-    get_current_driver_version,
-    _get_gpu_generation,
     _get_compute_capability,
+    _get_gpu_generation,
+    detect_gpu,
+    get_current_driver_version,
+    has_nvidia_gpu,
 )
 
 
@@ -171,13 +170,13 @@ class TestHasNvidiaGPU:
         """Test has_nvidia_gpu returns False."""
         mock_run.side_effect = Exception("not found")
 
-        with patch("nvidia_inst.gpu.detector._nvidia_smi_available", return_value=False):
-            with patch("subprocess.run") as lspci_mock:
-                lspci_mock.return_value = MagicMock(
-                    stdout="00:02.0 VGA compatible controller: Intel",
-                    returncode=0,
-                )
-                assert has_nvidia_gpu() is False
+        with patch("nvidia_inst.gpu.detector._nvidia_smi_available", return_value=False), \
+             patch("subprocess.run") as lspci_mock:
+            lspci_mock.return_value = MagicMock(
+                stdout="00:02.0 VGA compatible controller: Intel",
+                returncode=0,
+            )
+            assert has_nvidia_gpu() is False
 
 
 class TestCurrentDriverVersion:

@@ -6,7 +6,6 @@ the compatibility matrix system (src/nvidia_inst/gpu/matrix/).
 
 import re
 from dataclasses import dataclass
-from typing import Optional
 
 from nvidia_inst.gpu.detector import GPUInfo
 from nvidia_inst.gpu.matrix import MatrixManager
@@ -14,7 +13,7 @@ from nvidia_inst.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-_matrix_manager: Optional[MatrixManager] = None
+_matrix_manager: MatrixManager | None = None
 
 
 def _get_matrix_manager() -> MatrixManager:
@@ -62,13 +61,13 @@ class DriverRange:
     """Range of compatible driver versions."""
 
     min_version: str
-    max_version: Optional[str]
+    max_version: str | None
     cuda_min: str
-    cuda_max: Optional[str]
+    cuda_max: str | None
     is_eol: bool = False
     is_limited: bool = False
-    max_branch: Optional[str] = None
-    eol_message: Optional[str] = None
+    max_branch: str | None = None
+    eol_message: str | None = None
 
 
 def get_driver_range(gpu: GPUInfo) -> DriverRange:
@@ -92,7 +91,7 @@ def get_driver_range(gpu: GPUInfo) -> DriverRange:
                 branch_info = manager.get_branch_info(gen_info.branches[0])
                 if branch_info:
                     max_version = branch_info.latest_version
-            
+
             return DriverRange(
                 min_version=gen_info.min_driver,
                 max_version=max_version,
@@ -163,7 +162,7 @@ def _get_driver_range_fallback(generation: str) -> DriverRange:
     )
 
 
-def _get_cuda_range(generation: str) -> tuple[str, Optional[str]]:
+def _get_cuda_range(generation: str) -> tuple[str, str | None]:
     """Get CUDA version range for a GPU generation."""
     cuda_versions = {
         "kepler": ("7.5", "9.0"),
@@ -226,7 +225,7 @@ def is_driver_compatible_with_branch(driver_version: str, max_branch: str) -> bo
     return int(driver_branch) <= int(max_branch)
 
 
-def get_max_driver_version(gpu_name: str) -> Optional[str]:
+def get_max_driver_version(gpu_name: str) -> str | None:
     """Return max driver version for EOL/Limited GPUs.
 
     Args:
@@ -279,8 +278,7 @@ def is_driver_compatible(driver_version: str, gpu: GPUInfo) -> bool:
         return False
 
     if driver_range.max_version:
-        if not _compare_versions(driver_range.max_version, driver_version):
-            return False
+        return _compare_versions(driver_range.max_version, driver_version)
 
     return True
 

@@ -1,14 +1,14 @@
 """Tests for distro detection."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
+
 from nvidia_inst.distro.detector import (
-    detect_distro,
     DistroInfo,
-    is_ubuntu,
-    is_fedora,
+    detect_distro,
     is_arch,
     is_debian,
+    is_fedora,
+    is_ubuntu,
 )
 from nvidia_inst.distro.factory import get_package_manager
 

@@ -1,10 +1,8 @@
 """Distribution detection for Linux systems."""
 
-import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from nvidia_inst.utils.logger import get_logger
 

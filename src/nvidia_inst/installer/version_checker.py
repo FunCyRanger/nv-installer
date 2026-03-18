@@ -3,7 +3,6 @@
 import re
 import urllib.request
 from dataclasses import dataclass, field
-from typing import Optional
 
 from nvidia_inst.distro.factory import get_package_manager
 from nvidia_inst.gpu.compatibility import DriverRange
@@ -22,7 +21,7 @@ class VersionCheckResult:
     success: bool = False
     repo_versions: list[str] = field(default_factory=list)
     official_versions: list[str] = field(default_factory=list)
-    installed_driver_version: Optional[str] = None
+    installed_driver_version: str | None = None
     compatible: bool = False
     compatible_versions: list[str] = field(default_factory=list)
     incompatible_versions: list[str] = field(default_factory=list)
@@ -33,7 +32,7 @@ class VersionCheckResult:
 class VersionChecker:
     """Check driver version availability and compatibility."""
 
-    def fetch_official_versions(self, branch: Optional[str] = None) -> list[str]:
+    def fetch_official_versions(self, branch: str | None = None) -> list[str]:
         """Fetch available versions from Nvidia driver archive.
 
         Args:
@@ -82,7 +81,7 @@ class VersionChecker:
             logger.warning(f"Failed to get repo versions: {e}")
             return []
 
-    def check_installed_driver(self, distro_id: str) -> Optional[str]:
+    def check_installed_driver(self, distro_id: str) -> str | None:
         """Check what driver version is currently installed.
 
         Args:
@@ -107,7 +106,7 @@ class VersionChecker:
             logger.warning(f"Failed to check installed driver: {e}")
         return None
 
-    def _check_dnf_installed(self, pm) -> Optional[str]:
+    def _check_dnf_installed(self, pm) -> str | None:
         """Check installed driver via DNF."""
         import subprocess
         try:
@@ -139,7 +138,7 @@ class VersionChecker:
             pass
         return None
 
-    def _check_apt_installed(self, pm) -> Optional[str]:
+    def _check_apt_installed(self, pm) -> str | None:
         """Check installed driver via APT."""
         import subprocess
         try:
@@ -155,7 +154,7 @@ class VersionChecker:
             pass
         return None
 
-    def _check_pacman_installed(self, pm) -> Optional[str]:
+    def _check_pacman_installed(self, pm) -> str | None:
         """Check installed driver via Pacman."""
         installed = pm.get_installed_version("nvidia")
         if installed:
@@ -165,7 +164,7 @@ class VersionChecker:
             return "nvidia-470xx"
         return None
 
-    def _check_zypper_installed(self, pm) -> Optional[str]:
+    def _check_zypper_installed(self, pm) -> str | None:
         """Check installed driver via Zypper."""
         version = pm.get_installed_version("x11-video-nvidiaG05")
         if version:
@@ -175,7 +174,7 @@ class VersionChecker:
             return "G04"
         return None
 
-    def _extract_branch(self, version: str) -> Optional[str]:
+    def _extract_branch(self, version: str) -> str | None:
         """Extract major version number from driver version."""
         match = re.match(r"(\d+)\.", version)
         return match.group(1) if match else None
@@ -244,27 +243,25 @@ class VersionChecker:
 
         if result.installed_driver_version:
             installed_branch = self._extract_branch(result.installed_driver_version)
-            if installed_branch:
-                if driver_range.max_branch and installed_branch > driver_range.max_branch:
-                    result.warnings.append(
-                        f"Installed driver {result.installed_driver_version} may be "
-                        f"incompatible with this GPU. "
-                        f"GPU requires: {driver_range.max_branch}.xx"
-                    )
-            if driver_range.is_limited and driver_range.max_branch:
-                if not self._is_branch_compatible(
-                    result.installed_driver_version, driver_range.max_branch
-                ):
-                    result.warnings.append(
-                        f"WARNING: Installed driver ({result.installed_driver_version}) "
-                        f"is incompatible with this GPU! "
-                        f"Your GPU requires {driver_range.max_branch}.xx drivers. "
-                        f"Installing {result.installed_driver_version} may fail or not work properly."
-                    )
+            if installed_branch and driver_range.max_branch and installed_branch > driver_range.max_branch:
+                result.warnings.append(
+                    f"Installed driver {result.installed_driver_version} may be "
+                    f"incompatible with this GPU. "
+                    f"GPU requires: {driver_range.max_branch}.xx"
+                )
+            if driver_range.is_limited and driver_range.max_branch and not self._is_branch_compatible(
+                result.installed_driver_version, driver_range.max_branch
+            ):
+                result.warnings.append(
+                    f"WARNING: Installed driver ({result.installed_driver_version}) "
+                    f"is incompatible with this GPU! "
+                    f"Your GPU requires {driver_range.max_branch}.xx drivers. "
+                    f"Installing {result.installed_driver_version} may fail or not work properly."
+                )
 
         return result
 
-    def _get_driver_package(self, distro_id: str) -> Optional[str]:
+    def _get_driver_package(self, distro_id: str) -> str | None:
         """Get the primary driver package name for the distro."""
         package_map = {
             "fedora": "akmod-nvidia",

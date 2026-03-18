@@ -3,7 +3,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 
 class SupportStatus(Enum):
@@ -19,7 +18,7 @@ class CUDARange:
     """CUDA toolkit compatibility range for a GPU generation."""
 
     min_version: str
-    max_version: Optional[str] = None
+    max_version: str | None = None
     recommended: str = "12.2"
 
 
@@ -42,8 +41,8 @@ class GPUGenerationInfo:
     branches: list[str]
     status: SupportStatus
     min_driver: str
-    max_driver: Optional[str] = None
-    eol_message: Optional[str] = None
+    max_driver: str | None = None
+    eol_message: str | None = None
 
     @property
     def is_eol(self) -> bool:
@@ -62,7 +61,7 @@ class DriverBranchInfo:
     name: str
     latest_version: str
     release_date: str
-    eol_date: Optional[str] = None
+    eol_date: str | None = None
     gpu_generations: list[str] = field(default_factory=list)
 
     @property
@@ -226,17 +225,17 @@ DRIVER_BRANCHES: dict[str, DriverBranchInfo] = {
 }
 
 
-def get_generation_info(name: str) -> Optional[GPUGenerationInfo]:
+def get_generation_info(name: str) -> GPUGenerationInfo | None:
     """Get compatibility info for a GPU generation by name."""
     return GPU_GENERATIONS.get(name.lower())
 
 
-def get_branch_info(number: str) -> Optional[DriverBranchInfo]:
+def get_branch_info(number: str) -> DriverBranchInfo | None:
     """Get info for a driver branch by number."""
     return DRIVER_BRANCHES.get(number)
 
 
-def get_max_branch_for_generation(generation: str) -> Optional[str]:
+def get_max_branch_for_generation(generation: str) -> str | None:
     """Get the maximum driver branch for a GPU generation."""
     info = get_generation_info(generation)
     if info and info.branches:
