@@ -9,6 +9,15 @@ description = "Cross-distribution Nvidia driver installer with CUDA support"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{name = "nvidia-inst"}]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -18,17 +27,6 @@ dev = [
     "black>=23.0.0",
     "mypy>=1.5.0",
     "requests>=2.31.0",
-]
-
-[project.metadata]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: System Administrators",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: POSIX :: Linux",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
 ]
 
 [project.scripts]
