@@ -16,14 +16,14 @@ jobs:
       - name: Install system dependencies
         run: dnf install -y python3 python3-pip git curl
 
-      - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh && echo "$HOME/.local/bin" >> $GITHUB_PATH
-
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install package
-        run: uv pip install -e ".[dev]" --system
+      - name: Install uv and package
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          export PATH="$HOME/.local/bin:$PATH"
+          uv pip install -e ".[dev]" --system
 
       - name: Run DNF package manager tests
         run: python3 -m pytest tests/test_dnf.py -v
@@ -41,14 +41,14 @@ jobs:
           apt-get update
           apt-get install -y python3 python3-pip git curl
 
-      - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh && echo "$HOME/.local/bin" >> $GITHUB_PATH
-
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install package
-        run: uv pip install -e ".[dev]" --system
+      - name: Install uv and package
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          export PATH="$HOME/.local/bin:$PATH"
+          uv pip install -e ".[dev]" --system
 
       - name: Run APT package manager tests
         run: python3 -m pytest tests/test_apt.py -v
@@ -64,14 +64,14 @@ jobs:
       - name: Install system dependencies
         run: pacman -Sy --noconfirm python python-pip git curl
 
-      - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh && echo "$HOME/.local/bin" >> $GITHUB_PATH
-
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install package
-        run: uv pip install -e ".[dev]" --system
+      - name: Install uv and package
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          export PATH="$HOME/.local/bin:$PATH"
+          uv pip install -e ".[dev]" --system
 
       - name: Run Pacman package manager tests
         run: python3 -m pytest tests/test_pacman.py -v
@@ -84,14 +84,14 @@ jobs:
       - name: Install system dependencies
         run: zypper install -y python3 python3-pip git curl
 
-      - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh && echo "$HOME/.local/bin" >> $GITHUB_PATH
-
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install package
-        run: uv pip install -e ".[dev]" --system
+      - name: Install uv and package
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          export PATH="$HOME/.local/bin:$PATH"
+          uv pip install -e ".[dev]" --system
 
       - name: Run Zypper package manager tests
         run: python3 -m pytest tests/test_zypper.py -v
@@ -107,6 +107,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
       - name: Install package
         run: uv pip install -e ".[dev]"
@@ -128,6 +131,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
       - name: Install package
         run: uv pip install -e ".[dev]"
