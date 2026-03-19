@@ -71,7 +71,7 @@ jobs:
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
           export PATH="$HOME/.local/bin:$PATH"
-          uv pip install -e ".[dev]" --system
+          uv pip install -e ".[dev]" --system --break-system-packages
 
       - name: Run Pacman package manager tests
         run: python3 -m pytest tests/test_pacman.py -v
@@ -112,7 +112,7 @@ jobs:
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
       - name: Install package
-        run: uv pip install -e ".[dev]"
+        run: uv pip install -e ".[dev]" --system
 
       - name: Run matrix tests
         run: python3 -m pytest tests/test_matrix.py -v
@@ -136,7 +136,7 @@ jobs:
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
       - name: Install package
-        run: uv pip install -e ".[dev]"
+        run: uv pip install -e ".[dev]" --system
 
       - name: Run uninstaller tests
         run: python3 -m pytest tests/test_uninstaller.py -v
