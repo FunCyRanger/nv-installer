@@ -42,6 +42,7 @@ from nvidia_inst.installer.uninstaller import (
     revert_to_nouveau,
 )
 from nvidia_inst.installer.validation import (
+    is_nvidia_working,
     post_install_validate,
     pre_install_check,
     unblock_nouveau,
@@ -179,6 +180,16 @@ def check_compatibility() -> int:
     check_prerequisites(distro.id, distro.version_id, driver_range)
 
     print_compatibility_info(distro, gpu, driver_range)
+
+    working_check = is_nvidia_working()
+    if working_check.is_working:
+        print(
+            f"\n[OK] NVIDIA driver is working (version {working_check.driver_version})"
+        )
+    elif working_check.gpu_detected:
+        print("\n[INFO] NVIDIA GPU detected but driver not loaded")
+    else:
+        print("\n[INFO] No NVIDIA GPU detected")
 
     if driver_range.is_eol:
         print(f"\nWARNING: {driver_range.eol_message}")
@@ -506,6 +517,18 @@ def install_driver_cli(
         return _run_dry_run(
             distro, gpu, driver_range, driver_version, with_cuda, cuda_version
         )
+
+    working_check = is_nvidia_working()
+    if working_check.is_working:
+        print(
+            f"\n[INFO] NVIDIA driver is already working (version {working_check.driver_version})"
+        )
+        print("Proceeding will upgrade to the latest compatible driver.")
+        if not skip_confirmation:
+            response = input("\nSkip installation? [Y/n]: ")
+            if response.lower() not in ("n", "no"):
+                print("Installation skipped.")
+                return 0
 
     if not skip_confirmation:
         response = input("\nProceed with installation? [y/N]: ")

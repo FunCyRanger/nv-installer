@@ -52,7 +52,9 @@ def pre_install_check(distro_id: str, packages: list[str]) -> SafetyCheckResult:
         stat = os.statvfs("/var")
         free_mb = (stat.f_bavail * stat.f_frsize) / (1024 * 1024)
         if free_mb < 500:
-            result.warnings.append(f"Low disk space: {free_mb:.0f}MB free (500MB recommended)")
+            result.warnings.append(
+                f"Low disk space: {free_mb:.0f}MB free (500MB recommended)"
+            )
     except Exception:
         pass
 
@@ -64,7 +66,9 @@ def pre_install_check(distro_id: str, packages: list[str]) -> SafetyCheckResult:
 
     # 3. Check kernel build deps
     if not _check_kernel_devel():
-        result.warnings.append("Kernel development packages missing - akmod may fail to build")
+        result.warnings.append(
+            "Kernel development packages missing - akmod may fail to build"
+        )
 
     # 4. Check Secure Boot
     if _check_secure_boot():
@@ -72,12 +76,16 @@ def pre_install_check(distro_id: str, packages: list[str]) -> SafetyCheckResult:
 
     # 5. Check running environment
     if os.environ.get("DISPLAY"):
-        result.warnings.append("Running in graphical session - recommend running from tty or SSH")
+        result.warnings.append(
+            "Running in graphical session - recommend running from tty or SSH"
+        )
 
     return result
 
 
-def post_install_validate(distro_id: str, expected_packages: list[str]) -> ValidationResult:
+def post_install_validate(
+    distro_id: str, expected_packages: list[str]
+) -> ValidationResult:
     """Run post-installation validation."""
     result = ValidationResult(
         success=True,
@@ -106,7 +114,9 @@ def post_install_validate(distro_id: str, expected_packages: list[str]) -> Valid
                 result.missing_packages.append(pkg)
 
         if result.missing_packages:
-            result.warnings.append(f"Packages not installed: {', '.join(result.missing_packages)}")
+            result.warnings.append(
+                f"Packages not installed: {', '.join(result.missing_packages)}"
+            )
     except Exception as e:
         result.errors.append(f"Could not verify packages: {e}")
 
@@ -118,14 +128,18 @@ def post_install_validate(distro_id: str, expected_packages: list[str]) -> Valid
         result.kernel_module_built = len(modules) > 0
 
         if not result.kernel_module_built:
-            result.warnings.append("Kernel module not built yet (may need reboot or akmod failed)")
+            result.warnings.append(
+                "Kernel module not built yet (may need reboot or akmod failed)"
+            )
     except Exception:
         result.warnings.append("Could not verify kernel module")
 
     # 3. Check nouveau blocked
     result.nouveau_blocked = Path("/etc/modprobe.d/blacklist-nouveau.conf").exists()
     if not result.nouveau_blocked:
-        result.warnings.append("Nouveau is not blocked - may conflict with nvidia driver")
+        result.warnings.append(
+            "Nouveau is not blocked - may conflict with nvidia driver"
+        )
 
     # 4. Test nvidia-smi
     try:
@@ -140,7 +154,11 @@ def post_install_validate(distro_id: str, expected_packages: list[str]) -> Valid
         if result.nvidia_smi_works:
             try:
                 ver_check = subprocess.run(
-                    ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
+                    [
+                        "nvidia-smi",
+                        "--query-gpu=driver_version",
+                        "--format=csv,noheader",
+                    ],
                     capture_output=True,
                     text=True,
                     timeout=10,
@@ -149,7 +167,9 @@ def post_install_validate(distro_id: str, expected_packages: list[str]) -> Valid
             except Exception:
                 pass
         else:
-            result.warnings.append("nvidia-smi not available (driver may work but needs reboot)")
+            result.warnings.append(
+                "nvidia-smi not available (driver may work but needs reboot)"
+            )
     except FileNotFoundError:
         result.nvidia_smi_works = False
         result.warnings.append("nvidia-smi not found (will be available after reboot)")
@@ -203,3 +223,70 @@ def _check_secure_boot() -> bool:
         return "enabled" in result.stdout.lower()
     except Exception:
         return False
+
+
+@dataclass
+class WorkingInstallResult:
+    """Result of checking if NVIDIA is working."""
+
+    is_working: bool
+    driver_version: str | None
+    kernel_module_loaded: bool
+    gpu_detected: bool
+
+
+def is_nvidia_working() -> WorkingInstallResult:
+    """Check if NVIDIA driver is currently working.
+
+    Returns:
+        WorkingInstallResult with working status and details.
+    """
+    result = WorkingInstallResult(
+        is_working=False,
+        driver_version=None,
+        kernel_module_loaded=False,
+        gpu_detected=False,
+    )
+
+    try:
+        smi_check = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if smi_check.returncode == 0 and smi_check.stdout.strip():
+            result.gpu_detected = True
+    except Exception:
+        return result
+
+    try:
+        ver_check = subprocess.run(
+            ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if ver_check.returncode == 0:
+            result.driver_version = ver_check.stdout.strip()
+    except Exception:
+        pass
+
+    try:
+        lsmod_check = subprocess.run(
+            ["lsmod"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        result.kernel_module_loaded = "nvidia" in lsmod_check.stdout
+    except Exception:
+        pass
+
+    result.is_working = (
+        result.gpu_detected
+        and result.driver_version is not None
+        and result.kernel_module_loaded
+    )
+
+    return result
