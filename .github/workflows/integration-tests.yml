@@ -75,7 +75,7 @@ jobs:
   opensuse:
     name: openSUSE
     runs-on: ubuntu-latest
-    container: opensuse/leap:latest
+    container: opensuse/tumbleweed:latest
     steps:
       - name: Install system dependencies
         run: zypper install -y python3 python3-pip git
