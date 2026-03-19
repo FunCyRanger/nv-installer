@@ -98,14 +98,14 @@ jobs:
     container: opensuse/tumbleweed:latest
     steps:
       - name: Install system dependencies
-        run: zypper install -y python3 python3-pip git curl
+        run: zypper install -y python3 python3-pip git curl bash
 
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install uv and package
         run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
+          /usr/bin/bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
           export PATH="$HOME/.local/bin:$PATH"
           uv venv .venv
           . .venv/bin/activate
