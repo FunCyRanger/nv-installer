@@ -29,6 +29,7 @@ dev = [
     "requests>=2.31.0",
 ]
 
+
 [project.scripts]
 nvidia-inst = "nvidia_inst.cli:main"
 
