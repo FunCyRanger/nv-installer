@@ -26,6 +26,17 @@ from nvidia_inst.installer.driver import (
     get_compatible_driver_packages,
 )
 from nvidia_inst.installer.prerequisites import PrerequisitesChecker
+from nvidia_inst.installer.secureboot import (
+    SecureBootError,
+    SecureBootState,
+    enroll_mok_key,
+    generate_mok_key,
+    get_mok_key_paths,
+    get_secure_boot_state,
+    is_mok_enrolled,
+    setup_auto_signing,
+    sign_nvidia_modules,
+)
 from nvidia_inst.installer.uninstaller import (
     check_nvidia_packages_installed,
     revert_to_nouveau,
@@ -235,7 +246,9 @@ def check_prerequisites(
     checker = PrerequisitesChecker()
     result = checker.check_all(distro_id, distro_version, driver_range)
 
-    print(f"\n[{'✓' if result.package_manager_available else '✗'}] Package manager: {result.package_manager}")
+    print(
+        f"\n[{'✓' if result.package_manager_available else '✗'}] Package manager: {result.package_manager}"
+    )
 
     if result.repos_configured:
         for repo in result.repos_configured:
@@ -245,7 +258,10 @@ def check_prerequisites(
         for repo in result.repos_missing:
             print(f"[✗] {repo}: NOT CONFIGURED")
 
-    print(f"\n[{'✓' if result.driver_packages_available else '✗'}] Driver packages: ", end="")
+    print(
+        f"\n[{'✓' if result.driver_packages_available else '✗'}] Driver packages: ",
+        end="",
+    )
     if result.driver_packages_available:
         print(", ".join(result.driver_packages))
     else:
@@ -267,7 +283,9 @@ def check_prerequisites(
             print(message)
             if success:
                 print("\nRe-checking prerequisites...")
-                return check_prerequisites(distro_id, distro_version, driver_range, fix=False)
+                return check_prerequisites(
+                    distro_id, distro_version, driver_range, fix=False
+                )
 
     print("\n" + "-" * 50)
 
@@ -280,6 +298,115 @@ def check_prerequisites(
     print()
 
     return 0 if result.success else 1
+
+
+def handle_secure_boot(
+    distro_id: str,
+    skip_confirmation: bool = False,
+) -> tuple[bool, SecureBootState]:
+    """Handle Secure Boot setup for NVIDIA driver installation.
+
+    Args:
+        distro_id: Distribution ID.
+        skip_confirmation: Skip user prompts.
+
+    Returns:
+        Tuple of (setup_completed, secure_boot_state).
+    """
+    state = get_secure_boot_state()
+
+    if state == SecureBootState.DISABLED:
+        print("\n[INFO] Secure Boot is disabled - no signing required.")
+        return (True, state)
+
+    if state == SecureBootState.UNKNOWN:
+        print("\n[WARNING] Cannot detect Secure Boot state.")
+        print("  mokutil may not be installed. Driver may fail to load.")
+        return (True, state)
+
+    print(f"\n[INFO] Secure Boot is {state.value.replace('_', ' ').title()}")
+
+    if state == SecureBootState.ENABLED:
+        print("\n  Secure Boot is enabled. NVIDIA drivers need to be signed.")
+        print("  We can set up MOK (Machine Owner Key) signing.")
+
+    if state == SecureBootState.SETUP_MODE:
+        print(
+            "\n  System is in Setup Mode - can enroll keys directly (no reboot needed)."
+        )
+
+    key_paths = get_mok_key_paths(distro_id)
+
+    if is_mok_enrolled(key_paths.public_cert):
+        print("\n[INFO] MOK key already enrolled - modules should load correctly.")
+        return (True, state)
+
+    print("\n  Would you like to set up MOK signing?")
+    print("  This will:")
+    print("    1. Generate a signing key pair")
+    print("    2. Enroll the public key in Secure Boot")
+    print("    3. Set up automatic re-signing on kernel updates")
+
+    if state == SecureBootState.ENABLED:
+        print("\n  NOTE: Reboot will be required after enrollment to complete setup.")
+
+    if not skip_confirmation:
+        response = input("\nSet up MOK signing? [Y/n]: ")
+        if response.lower() in ("n", "no"):
+            print("\n[WARNING] Driver may fail to load without signing.")
+            print("  You can set up signing later by running this script again.")
+            return (False, state)
+
+    try:
+        key_dir = key_paths.private_key.parent
+        print("\n[INFO] Generating MOK key pair...")
+        generate_mok_key(key_dir)
+
+        print("[INFO] Enrolling MOK key...")
+        result = enroll_mok_key(key_paths.public_cert)
+
+        if result.requires_reboot:
+            print("\n" + "=" * 50)
+            print(" IMPORTANT: Reboot Required")
+            print("=" * 50)
+            if result.reboot_instructions:
+                print(f"\n{result.reboot_instructions}")
+            print("\nAfter completing MOK enrollment, run this script again")
+            print("to continue with driver installation.\n")
+
+        print("\n[INFO] Setting up automatic signing for future updates...")
+        setup_result = setup_auto_signing(
+            key_paths.private_key,
+            key_paths.public_cert,
+            distro_id,
+        )
+
+        if setup_result.success:
+            print("[INFO] Automatic signing configured successfully.")
+        else:
+            print(f"[WARNING] Auto-signing setup: {setup_result.message}")
+
+        print("\n[INFO] Signing currently installed NVIDIA modules...")
+        signed, failed = sign_nvidia_modules(
+            key_paths.private_key,
+            key_paths.public_cert,
+        )
+        print(f"  Signed: {signed}, Failed: {failed}")
+
+        return (True, state)
+
+    except SecureBootError as e:
+        logger.error(f"Secure Boot setup failed: {e}")
+        print(f"\n[ERROR] Secure Boot setup failed: {e}")
+        print("\n  You may need to:")
+        print("    - Install mokutil: sudo apt install mokutil (or equivalent)")
+        print("    - Install openssl: sudo apt install openssl (or equivalent)")
+        return (False, state)
+
+    except Exception as e:
+        logger.error(f"Unexpected error during Secure Boot setup: {e}")
+        print(f"\n[ERROR] Unexpected error: {e}")
+        return (False, state)
 
 
 def print_version_check(version_check: Any, driver_range: Any) -> None:
@@ -376,7 +503,9 @@ def install_driver_cli(
         print(f"\nWARNING: {driver_range.eol_message}")
 
     if dry_run:
-        return _run_dry_run(distro, gpu, driver_range, driver_version, with_cuda, cuda_version)
+        return _run_dry_run(
+            distro, gpu, driver_range, driver_version, with_cuda, cuda_version
+        )
 
     if not skip_confirmation:
         response = input("\nProceed with installation? [y/N]: ")
@@ -393,10 +522,14 @@ def install_driver_cli(
             nouveau_disabled = True
             print("Nouveau has been disabled.")
 
-    if check_secure_boot():
-        logger.warning("Secure Boot is enabled")
-        print("Secure Boot is enabled. You may need to sign the driver.")
-        print("Consider disabling Secure Boot in BIOS/UEFI settings.")
+    sb_completed, sb_state = handle_secure_boot(distro.id, skip_confirmation)
+
+    if sb_state == SecureBootState.ENABLED and not sb_completed:
+        print("\n[WARNING] Secure Boot signing not set up.")
+        response = input("Continue anyway without signing? [y/N]: ")
+        if response.lower() not in ("y", "yes"):
+            print("Installation cancelled.")
+            return 1
 
     try:
         pkg_manager = get_package_manager()
@@ -469,7 +602,9 @@ def install_driver_cli(
                 print("  - Boot to recovery mode")
                 print("  - Run: sudo rm /etc/modprobe.d/blacklist-nouveau.conf")
                 print("  - Run: sudo dracut -f && reboot")
-                print("\nAfter fixing, you can manually block Nouveau once driver works.")
+                print(
+                    "\nAfter fixing, you can manually block Nouveau once driver works."
+                )
                 nouveau_disabled = False
             else:
                 print(f"  ✗ Could not re-enable Nouveau: {message}")
@@ -527,7 +662,8 @@ def _run_dry_run(
 
     print("\n--- Pre-install Checks ---")
 
-    from nvidia_inst.installer.driver import check_nouveau, check_secure_boot
+    from nvidia_inst.installer.driver import check_nouveau
+
     nouveau_loaded = check_nouveau()
     if nouveau_loaded:
         print("[ ] Nouveau kernel module - NEEDS TO BE DISABLED")
@@ -551,8 +687,12 @@ def _run_dry_run(
         if driver_range.is_eol:
             print(f"Selected driver version (EOL): {driver_range.max_version}")
         else:
-            print(f"Selected driver branch: {driver_range.max_branch}.xx (current max: {driver_range.max_version})")
-            print(f"  -> Will receive branch updates (e.g., {driver_range.max_branch}.143, {driver_range.max_branch}.144)")
+            print(
+                f"Selected driver branch: {driver_range.max_branch}.xx (current max: {driver_range.max_version})"
+            )
+            print(
+                f"  -> Will receive branch updates (e.g., {driver_range.max_branch}.143, {driver_range.max_branch}.144)"
+            )
     else:
         print("Selected driver version: Latest (590.xx)")
 
@@ -588,7 +728,9 @@ def _run_dry_run(
         if wrong_branch:
             print("\n# Step 2: BLOCK wrong driver branch (IMPORTANT!):")
             if distro.id in ("fedora", "rhel", "centos"):
-                print(f"  # Block {wrong_branch}.xx drivers - these are incompatible with your GPU!")
+                print(
+                    f"  # Block {wrong_branch}.xx drivers - these are incompatible with your GPU!"
+                )
                 print(f"  sudo dnf versionlock add '*{wrong_branch}.*' || true")
             elif distro.id in ("ubuntu", "debian"):
                 print(f"  # Block {wrong_branch}.xx drivers in /etc/apt/preferences.d/")
@@ -616,13 +758,21 @@ def _run_dry_run(
             if distro.id in ("ubuntu", "debian"):
                 print(f"  # Pin nvidia-driver to {driver_range.max_version}")
             elif distro.id in ("fedora", "rhel", "centos"):
-                print(f"  sudo dnf versionlock add 'akmod-nvidia-{driver_range.max_branch}.*'")
+                print(
+                    f"  sudo dnf versionlock add 'akmod-nvidia-{driver_range.max_branch}.*'"
+                )
         else:
-            print(f"\n# Step 4: Lock driver to branch {driver_range.max_branch}.xx (optional):")
+            print(
+                f"\n# Step 4: Lock driver to branch {driver_range.max_branch}.xx (optional):"
+            )
             if distro.id in ("ubuntu", "debian"):
-                print(f"  # Pin to branch {driver_range.max_branch}.* in /etc/apt/preferences.d/")
+                print(
+                    f"  # Pin to branch {driver_range.max_branch}.* in /etc/apt/preferences.d/"
+                )
             elif distro.id in ("fedora", "rhel", "centos"):
-                print(f"  sudo dnf versionlock add 'akmod-nvidia-{driver_range.max_branch}.*'")
+                print(
+                    f"  sudo dnf versionlock add 'akmod-nvidia-{driver_range.max_branch}.*'"
+                )
 
     # Step 5: Reboot (now after driver is installed)
     print("\n# Step 5: Reboot:")
@@ -655,6 +805,7 @@ def _get_wrong_branch(max_branch: str) -> str:
 def _get_cuda_installer(distro_id: str):
     """Get CUDA installer for distribution."""
     from nvidia_inst.installer.cuda import get_cuda_installer
+
     return get_cuda_installer(distro_id)
 
 
@@ -662,6 +813,7 @@ def update_matrix_on_startup() -> None:
     """Update matrix on startup (non-blocking)."""
     try:
         from nvidia_inst.gpu.matrix.manager import MatrixManager
+
         manager = MatrixManager()
         updated, message = manager.check_for_updates()
         if updated:
@@ -676,6 +828,7 @@ def show_matrix_info() -> int:
     """Show compatibility matrix information."""
     try:
         from nvidia_inst.gpu.matrix.manager import MatrixManager
+
         manager = MatrixManager()
 
         print("\n" + "=" * 60)
@@ -692,7 +845,9 @@ def show_matrix_info() -> int:
             for branch in sorted(branches.keys()):
                 branch_info = branches[branch]
                 eol = f" (EOL: {branch_info.eol_date})" if branch_info.eol_date else ""
-                print(f"  {branch}: {branch_info.name} - {branch_info.latest_version}{eol}")
+                print(
+                    f"  {branch}: {branch_info.name} - {branch_info.latest_version}{eol}"
+                )
 
         generations = manager.get_all_generations()
         if generations:
@@ -716,6 +871,7 @@ def update_matrix_cli() -> int:
     """Update compatibility matrix from online sources."""
     try:
         from nvidia_inst.gpu.matrix.manager import MatrixManager
+
         manager = MatrixManager(force_update=True)
         updated, message = manager.check_for_updates()
 
@@ -799,6 +955,7 @@ def main() -> int:
 
     if args.version:
         from nvidia_inst import __version__
+
         print(f"nvidia-inst {__version__}")
         return 0
 
@@ -847,6 +1004,7 @@ def launch_gui(args: argparse.Namespace) -> int:
     if gui_type == "tkinter":
         try:
             from nvidia_inst.gui.tkinter_gui import run_gui
+
             return run_gui(args)
         except ImportError as e:
             logger.error(f"Failed to import Tkinter: {e}")
@@ -856,6 +1014,7 @@ def launch_gui(args: argparse.Namespace) -> int:
     if gui_type == "zenity":
         try:
             from nvidia_inst.gui.zenity_gui import run_gui
+
             return run_gui(args)
         except ImportError as e:
             logger.error(f"Failed to import Zenity: {e}")
@@ -878,6 +1037,7 @@ def detect_gui_type() -> str | None:
 
     try:
         import importlib.util
+
         if importlib.util.find_spec("tkinter"):
             return "tkinter"
     except ImportError:
