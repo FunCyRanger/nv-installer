@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from nvidia_inst.gpu.compatibility import DriverRange
+
 
 @pytest.fixture
 def mock_subprocess_run():
@@ -144,3 +146,175 @@ def zypper_packages_output():
 def dpkg_query_output():
     """Sample dpkg-query output."""
     return "535.154.05-0ubuntu1"
+
+
+@pytest.fixture
+def mock_gpu():
+    """Mock GPU info for testing."""
+    return {
+        "model": "NVIDIA GeForce RTX 3080",
+        "compute_capability": 8.6,
+        "driver_version": "535.154.05",
+        "cuda_version": "12.2",
+        "vram": "10GB",
+    }
+
+
+@pytest.fixture
+def mock_distro():
+    """Mock distribution info for testing."""
+    return {
+        "id": "ubuntu",
+        "version_id": "22.04",
+        "name": "Ubuntu 22.04.3 LTS",
+        "kernel": "5.15.0-91-generic",
+        "pretty_name": "Ubuntu 22.04.3 LTS (Jammy Jellyfish)",
+    }
+
+
+@pytest.fixture
+def mock_driver_range():
+    """Mock driver range for Ampere GPU."""
+    return DriverRange(
+        min_version="535.154.05",
+        max_version=None,
+        max_branch="590",
+        cuda_min="11.8",
+        cuda_max="12.2",
+        is_eol=False,
+        is_limited=False,
+    )
+
+
+@pytest.fixture
+def mock_driver_range_eol():
+    """Mock driver range for Kepler (EOL) GPU."""
+    return DriverRange(
+        min_version="470.256.02",
+        max_version="470.256.02",
+        max_branch="470",
+        cuda_min="9.0",
+        cuda_max="9.0",
+        is_eol=True,
+        is_limited=True,
+        eol_message="Kepler GPUs are end-of-life. Limited to legacy driver 470.xx.",
+    )
+
+
+@pytest.fixture
+def mock_user_yes(monkeypatch):
+    """Mock user input to return 'yes'."""
+    monkeypatch.setattr("builtins.input", lambda _: "y")
+
+
+@pytest.fixture
+def mock_user_no(monkeypatch):
+    """Mock user input to return 'no'."""
+    monkeypatch.setattr("builtins.input", lambda _: "n")
+
+
+@pytest.fixture
+def mock_user_cancel(monkeypatch):
+    """Mock user input to return empty string (cancel)."""
+    monkeypatch.setattr("builtins.input", lambda _: "")
+
+
+@pytest.fixture
+def mock_has_nvidia_gpu_true(monkeypatch):
+    """Mock has_nvidia_gpu to return True."""
+    monkeypatch.setattr(
+        "nvidia_inst.gpu.detector.has_nvidia_gpu",
+        lambda: True,
+    )
+
+
+@pytest.fixture
+def mock_has_nvidia_gpu_false(monkeypatch):
+    """Mock has_nvidia_gpu to return False."""
+    monkeypatch.setattr(
+        "nvidia_inst.gpu.detector.has_nvidia_gpu",
+        lambda: False,
+    )
+
+
+@pytest.fixture
+def mock_distro_ubuntu(monkeypatch):
+    """Mock detect_distro to return Ubuntu."""
+    from nvidia_inst.distro.detector import DistroInfo
+
+    monkeypatch.setattr(
+        "nvidia_inst.distro.detector.detect_distro",
+        lambda: DistroInfo(
+            id="ubuntu",
+            version_id="22.04",
+            name="Ubuntu",
+            pretty_name="Ubuntu 22.04.3 LTS",
+            kernel="5.15.0-91-generic",
+        ),
+    )
+
+
+@pytest.fixture
+def mock_distro_fedora(monkeypatch):
+    """Mock detect_distro to return Fedora."""
+    from nvidia_inst.distro.detector import DistroInfo
+
+    monkeypatch.setattr(
+        "nvidia_inst.distro.detector.detect_distro",
+        lambda: DistroInfo(
+            id="fedora",
+            version_id="39",
+            name="Fedora",
+            pretty_name="Fedora Linux 39",
+            kernel="6.5.6-200.fc39.x86_64",
+        ),
+    )
+
+
+@pytest.fixture
+def mock_gpu_detect_rtx3080(monkeypatch):
+    """Mock detect_gpu to return RTX 3080."""
+    from nvidia_inst.gpu.detector import GPUInfo
+
+    monkeypatch.setattr(
+        "nvidia_inst.gpu.detector.detect_gpu",
+        lambda: GPUInfo(
+            model="NVIDIA GeForce RTX 3080",
+            compute_capability=8.6,
+            driver_version="535.154.05",
+            cuda_version="12.2",
+            vram="10GB",
+        ),
+    )
+
+
+@pytest.fixture
+def mock_nouveau_loaded(monkeypatch):
+    """Mock check_nouveau to return True (loaded)."""
+    from nvidia_inst.installer import driver
+
+    monkeypatch.setattr(f"{driver.__name__}.check_nouveau", lambda: True)
+
+
+@pytest.fixture
+def mock_nouveau_not_loaded(monkeypatch):
+    """Mock check_nouveau to return False (not loaded)."""
+    from nvidia_inst.installer import driver
+
+    monkeypatch.setattr(f"{driver.__name__}.check_nouveau", lambda: False)
+
+
+@pytest.fixture
+def mock_secure_boot_enabled(monkeypatch):
+    """Mock check_secure_boot to return True (enabled)."""
+    from nvidia_inst.installer import driver
+
+    monkeypatch.setattr(f"{driver.__name__}.check_secure_boot", lambda: True)
+
+
+@pytest.fixture
+def mock_secure_boot_disabled(monkeypatch):
+    """Mock check_secure_boot to return False (disabled)."""
+    from nvidia_inst.installer import driver
+
+    monkeypatch.setattr(f"{driver.__name__}.check_secure_boot", lambda: False)

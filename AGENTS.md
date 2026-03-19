@@ -127,6 +127,41 @@ scripts/                # install-*.sh, update-matrix.py
 
 ---
 
+## Testing
+
+```python
+# Mocking subprocess calls
+@patch("subprocess.run")
+def test_nouveau_loaded(mock_run):
+    mock_run.return_value = MagicMock(stdout="nouveau  1638400  0\n", returncode=0)
+    assert check_nouveau() is True
+
+# Testing CLI arguments
+def test_parse_args(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["nvidia-inst", "--check", "--debug"])
+    from nvidia_inst.cli import parse_args
+    args = parse_args()
+    assert args.check is True
+    assert args.debug is True
+
+# Using fixtures from conftest.py
+def test_with_mock_gpu(mock_gpu):
+    assert mock_gpu["model"] == "NVIDIA GeForce RTX 3080"
+```
+
+### Test Fixtures (in `tests/conftest.py`)
+- `mock_gpu` - Mock GPU info dict
+- `mock_distro` - Mock distro info dict
+- `mock_driver_range` - Mock driver range for Ampere
+- `mock_driver_range_eol` - Mock driver range for Kepler (EOL)
+- `mock_user_yes` / `mock_user_no` - Mock user input
+- `mock_has_nvidia_gpu_true` / `mock_has_nvidia_gpu_false`
+- `mock_distro_ubuntu` / `mock_distro_fedora`
+- `mock_nouveau_loaded` / `mock_nouveau_not_loaded`
+- `mock_secure_boot_enabled` / `mock_secure_boot_disabled`
+
+---
+
 ## Key Documentation
 
 - **PATTERNS.md** - Code patterns and implementation examples
