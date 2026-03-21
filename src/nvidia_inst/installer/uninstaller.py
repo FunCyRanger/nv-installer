@@ -14,6 +14,8 @@ class RevertResult:
 
     success: bool
     packages_removed: list[str]
+    versionlock_removed: list[str]
+    apt_preferences_removed: list[str]
     errors: list[str]
     message: str
 
@@ -23,9 +25,10 @@ def revert_to_nouveau(distro_id: str) -> RevertResult:
 
     This function:
     1. Removes proprietary Nvidia driver packages
-    2. Removes Nouveau blacklist if present
-    3. Rebuilds initramfs
-    4. Provides instructions for reboot
+    2. Removes versionlock entries (Fedora) and apt preferences (Ubuntu)
+    3. Removes Nouveau blacklist if present
+    4. Rebuilds initramfs
+    5. Provides instructions for reboot
 
     Args:
         distro_id: Distribution ID (e.g., 'ubuntu', 'fedora', 'arch').
@@ -36,15 +39,63 @@ def revert_to_nouveau(distro_id: str) -> RevertResult:
     result = RevertResult(
         success=False,
         packages_removed=[],
+        versionlock_removed=[],
+        apt_preferences_removed=[],
         errors=[],
         message="",
     )
 
-    if distro_id not in ("ubuntu", "debian", "linuxmint", "pop", "fedora", "rhel",
-                          "centos", "rocky", "alma", "arch", "manjaro", "opensuse", "sles"):
+    if distro_id not in (
+        "ubuntu",
+        "debian",
+        "linuxmint",
+        "pop",
+        "fedora",
+        "rhel",
+        "centos",
+        "rocky",
+        "alma",
+        "arch",
+        "manjaro",
+        "opensuse",
+        "sles",
+    ):
         result.errors.append(f"Unsupported distribution: {distro_id}")
         result.message = f"Unsupported distribution: {distro_id}"
         return result
+
+    packages = _get_packages_to_remove(distro_id)
+    if not packages:
+        result.errors.append("No Nvidia packages found to remove")
+        result.message = "No Nvidia packages found"
+        return result
+
+    removed = _remove_packages(distro_id, packages)
+    result.packages_removed = removed
+
+    if not removed:
+        result.errors.append("Failed to remove packages")
+        result.message = "Failed to remove Nvidia packages"
+        return result
+
+    if distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
+        vl_removed = _remove_versionlock_entries(packages)
+        result.versionlock_removed = vl_removed
+
+    if distro_id in ("ubuntu", "debian", "linuxmint", "pop"):
+        apt_removed = _remove_apt_preferences(packages)
+        result.apt_preferences_removed = apt_removed
+
+    _remove_blacklist()
+
+    initramfs_result = _rebuild_initramfs(distro_id)
+    if not initramfs_result:
+        result.errors.append("Failed to rebuild initramfs")
+
+    result.success = len(result.errors) == 0
+    result.message = _build_message(result, distro_id)
+
+    return result
 
     packages = _get_packages_to_remove(distro_id)
     if not packages:
@@ -136,11 +187,11 @@ def _remove_packages(distro_id: str, packages: list[str]) -> list[str]:
             if distro_id in ("ubuntu", "debian", "linuxmint", "pop"):
                 cmd = ["apt-get", "remove", "--purge", "-y", pkg_pattern]
             elif distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
-                cmd = ["dnf", "remove", "-y", pkg_pattern]
+                cmd = ["dnf", "remove", "-y", "--", pkg_pattern]
             elif distro_id in ("arch", "manjaro"):
                 cmd = ["pacman", "-Rns", "--noconfirm", pkg_pattern]
             elif distro_id in ("opensuse", "sles"):
-                cmd = ["zypper", "remove", "-y", pkg_pattern]
+                cmd = ["zypper", "remove", "-y", "--", pkg_pattern]
             else:
                 continue
 
@@ -165,12 +216,52 @@ def _remove_packages(distro_id: str, packages: list[str]) -> list[str]:
     return removed
 
 
+def _remove_versionlock_entries(packages: list[str]) -> list[str]:
+    """Remove versionlock entries for packages on Fedora/RHEL."""
+    removed = []
+    for pkg_pattern in packages:
+        try:
+            result = subprocess.run(
+                ["dnf", "versionlock", "delete", "--", pkg_pattern],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                removed.append(pkg_pattern)
+                logger.info(f"Removed versionlock: {pkg_pattern}")
+            elif "No matches" not in result.stderr:
+                logger.warning(f"Versionlock removal warning: {result.stderr}")
+        except Exception as e:
+            logger.warning(f"Failed to remove versionlock for {pkg_pattern}: {e}")
+    return removed
+
+
+def _remove_apt_preferences(packages: list[str]) -> list[str]:
+    """Remove apt preferences files created for packages."""
+    removed = []
+    from pathlib import Path
+
+    for pkg_pattern in packages:
+        base_name = pkg_pattern.replace("-*", "").replace("*", "")
+        pref_file = Path(f"/etc/apt/preferences.d/{base_name}")
+        try:
+            if pref_file.exists():
+                pref_file.unlink()
+                removed.append(str(pref_file))
+                logger.info(f"Removed apt preferences: {pref_file}")
+        except Exception as e:
+            logger.warning(f"Failed to remove {pref_file}: {e}")
+    return removed
+
+
 def _remove_blacklist() -> bool:
     """Remove Nouveau blacklist file if present."""
     blacklist = "/etc/modprobe.d/blacklist-nouveau.conf"
 
     try:
         from pathlib import Path
+
         if Path(blacklist).exists():
             Path(blacklist).unlink()
             logger.info("Removed Nouveau blacklist")
@@ -184,7 +275,15 @@ def _remove_blacklist() -> bool:
 def _rebuild_initramfs(distro_id: str) -> bool:
     """Rebuild initramfs to enable Nouveau."""
     try:
-        if distro_id in ("fedora", "rhel", "centos", "rocky", "alma", "opensuse", "sles"):
+        if distro_id in (
+            "fedora",
+            "rhel",
+            "centos",
+            "rocky",
+            "alma",
+            "opensuse",
+            "sles",
+        ):
             cmd = ["dracut", "-f", "--regenerate-all"]
         elif distro_id in ("arch", "manjaro"):
             cmd = ["mkinitcpio", "-P"]
@@ -222,6 +321,14 @@ def _build_message(result: RevertResult, distro_id: str) -> str:
 
     if result.packages_removed:
         parts.append(f"Removed {len(result.packages_removed)} package(s)")
+
+    if result.versionlock_removed:
+        parts.append(
+            f"Removed {len(result.versionlock_removed)} versionlock entry(ies)"
+        )
+
+    if result.apt_preferences_removed:
+        parts.append(f"Removed {len(result.apt_preferences_removed)} apt preference(s)")
 
     if result.errors:
         parts.append(f"{len(result.errors)} error(s) occurred")

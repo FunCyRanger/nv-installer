@@ -800,6 +800,54 @@ def _dry_run_change(
     print("  sudo nvidia-inst")
 
 
+def _dry_run_revert(distro: DistroInfo) -> None:
+    """Show dry-run output for reverting to Nouveau."""
+    from nvidia_inst.installer.uninstaller import _get_packages_to_remove
+
+    packages = _get_packages_to_remove(distro.id)
+
+    print("\n" + "=" * 50)
+    print(" DRY-RUN MODE: Revert to Nouveau")
+    print("=" * 50)
+
+    print("\nRemoving NVIDIA packages:")
+    if distro.id in ("ubuntu", "debian"):
+        print(f"  sudo apt-get remove --purge -y {' '.join(packages)}")
+    elif distro.id in ("fedora", "rhel", "centos"):
+        for pkg in packages:
+            print(f"  sudo dnf remove -y -- {pkg}")
+    elif distro.id in ("arch", "manjaro"):
+        print(f"  sudo pacman -Rns --noconfirm {' '.join(packages)}")
+    elif distro.id in ("opensuse", "sles"):
+        for pkg in packages:
+            print(f"  sudo zypper remove -y -- {pkg}")
+
+    if distro.id in ("fedora", "rhel", "centos"):
+        print("\nRemoving versionlock entries:")
+        for pkg in packages:
+            print(f"  sudo dnf versionlock delete -- {pkg}")
+
+    if distro.id in ("ubuntu", "debian"):
+        print("\nRemoving apt preferences:")
+        print("  sudo rm /etc/apt/preferences.d/nvidia")
+
+    print("\nRebuilding initramfs:")
+    if distro.id in ("fedora", "rhel", "centos", "opensuse", "sles"):
+        print("  sudo dracut -f --regenerate-all")
+    elif distro.id in ("arch", "manjaro"):
+        print("  sudo mkinitcpio -P")
+    else:
+        print("  sudo update-initramfs -u")
+
+    print("\nReboot:")
+    print("  sudo reboot")
+
+    print("\n" + "=" * 50)
+    print(" Or run without --dry-run to execute:")
+    print("  sudo nvidia-inst")
+    print("=" * 50)
+
+
 def execute_driver_change(
     option: DriverOption,
     state: DriverState,
@@ -830,6 +878,10 @@ def execute_driver_change(
         return 0
 
     if option.action == "revert_nouveau":
+        if dry_run:
+            _dry_run_revert(distro)
+            return 0
+
         print("\n[WARNING] This will remove NVIDIA proprietary driver.")
         response = input("Continue? [y/N]: ")
         if response.lower() not in ("y", "yes"):

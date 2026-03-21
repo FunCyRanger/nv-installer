@@ -196,8 +196,8 @@ class TestCheckNvidiaPackagesInstalled:
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="ii  nvidia-driver-535       535.154.05-0ubuntu1\n"
-                   "ii  nvidia-dkms-535         535.154.05-0ubuntu1\n",
-            stderr=""
+            "ii  nvidia-dkms-535         535.154.05-0ubuntu1\n",
+            stderr="",
         )
 
         result = check_nvidia_packages_installed("ubuntu")
@@ -210,8 +210,8 @@ class TestCheckNvidiaPackagesInstalled:
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="akmod-nvidia.x86_64        535.154.05-1.fc38\n"
-                   "xorg-x11-drv-nvidia.x86_64",
-            stderr=""
+            "xorg-x11-drv-nvidia.x86_64",
+            stderr="",
         )
 
         result = check_nvidia_packages_installed("fedora")
@@ -221,11 +221,7 @@ class TestCheckNvidiaPackagesInstalled:
     @patch("subprocess.run")
     def test_no_packages_found(self, mock_run):
         """Test when no Nvidia packages are found."""
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="",
-            stderr=""
-        )
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
 
         result = check_nvidia_packages_installed("ubuntu")
 
@@ -257,10 +253,14 @@ class TestRevertResult:
         result = RevertResult(
             success=True,
             packages_removed=["nvidia-driver-535"],
+            versionlock_removed=["akmod-nvidia-580.*"],
+            apt_preferences_removed=["/etc/apt/preferences.d/nvidia"],
             errors=[],
-            message="Success"
+            message="Success",
         )
 
         assert result.success is True
         assert len(result.packages_removed) == 1
+        assert len(result.versionlock_removed) == 1
+        assert len(result.apt_preferences_removed) == 1
         assert len(result.errors) == 0
