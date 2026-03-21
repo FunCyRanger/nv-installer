@@ -1,5 +1,20 @@
 # nvidia-inst
 
+> **⚠️ DISCLAIMER & WARNING**
+>
+> **This software is provided for testing and development purposes ONLY.**
+>
+> - **NOT for production use** - Do not use in production environments
+> - **User assumes all risk** - You are solely responsible for any consequences
+> - **System damage possible** - Driver installation can render your system unbootable
+> - **No warranty** - This software is provided "as is" without any warranty
+> - **Backup first** - Always have a working backup before using this script
+> - **Self-responsibility** - By using this software, you accept full responsibility
+>
+> **The authors/contributors are NOT liable for any damages, data loss, or system failures.**
+
+---
+
 > **Beta Status**: This software is in active development. Currently tested on Fedora 43 with Maxwell GPU. Contributions welcome!
 
 Cross-distribution Linux script for installing the latest compatible Nvidia driver with CUDA support.
