@@ -1,5 +1,6 @@
 """Tests for error handling scenarios."""
 
+import subprocess
 from unittest.mock import MagicMock, patch
 
 from nvidia_inst.installer.driver import (
@@ -192,7 +193,13 @@ class TestDisableNouveauErrors:
 
     def test_disable_nouveau_no_root(self):
         """Test disable_nouveau fails without root."""
-        with patch("os.geteuid", return_value=1000):
+        with (
+            patch("os.geteuid", return_value=1000),
+            patch("subprocess.run") as mock_run,
+            patch("nvidia_inst.distro.detector.detect_distro") as mock_detect,
+        ):
+            mock_run.side_effect = subprocess.CalledProcessError(1, "sudo")
+            mock_detect.return_value = MagicMock(id="ubuntu")
             assert disable_nouveau() is False
 
     def test_disable_nouveau_file_write_error(self):

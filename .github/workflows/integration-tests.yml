@@ -16,6 +16,8 @@ jobs:
     name: Fedora
     runs-on: ubuntu-latest
     container: fedora:rawhide
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Install system dependencies
         run: dnf install -y python3 python3-pip git curl
@@ -45,6 +47,8 @@ jobs:
     name: Ubuntu
     runs-on: ubuntu-latest
     container: ubuntu:24.04
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Install system dependencies
         run: |
@@ -76,6 +80,8 @@ jobs:
     name: Arch Linux
     runs-on: ubuntu-latest
     container: archlinux:latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Install system dependencies
         run: pacman -Sy --noconfirm python python-pip git curl
@@ -99,6 +105,8 @@ jobs:
   matrix:
     name: Matrix System
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -129,6 +137,8 @@ jobs:
   uninstaller:
     name: Uninstaller Tests
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4

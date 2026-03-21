@@ -1,5 +1,6 @@
 """Tests for the installer module."""
 
+import subprocess
 from unittest.mock import MagicMock, patch
 
 from nvidia_inst.installer.driver import (
@@ -62,6 +63,7 @@ class TestGetCompatiblePackages:
     def test_ubuntu_packages(self):
         """Test Ubuntu driver packages."""
         from nvidia_inst.gpu.compatibility import DriverRange
+
         driver_range = DriverRange(
             min_version="535.154.05",
             max_version=None,
@@ -75,6 +77,7 @@ class TestGetCompatiblePackages:
     def test_ubuntu_eol_packages(self):
         """Test Ubuntu EOL driver packages."""
         from nvidia_inst.gpu.compatibility import DriverRange
+
         driver_range = DriverRange(
             min_version="470.256.02",
             max_version="470.256.02",
@@ -88,6 +91,7 @@ class TestGetCompatiblePackages:
     def test_fedora_packages(self):
         """Test Fedora driver packages."""
         from nvidia_inst.gpu.compatibility import DriverRange
+
         driver_range = DriverRange(
             min_version="535.154.05",
             max_version=None,
@@ -102,6 +106,7 @@ class TestGetCompatiblePackages:
     def test_arch_packages(self):
         """Test Arch Linux driver packages."""
         from nvidia_inst.gpu.compatibility import DriverRange
+
         driver_range = DriverRange(
             min_version="535.154.05",
             max_version=None,
@@ -116,6 +121,7 @@ class TestGetCompatiblePackages:
     def test_arch_eol_packages(self):
         """Test Arch Linux EOL driver packages."""
         from nvidia_inst.gpu.compatibility import DriverRange
+
         driver_range = DriverRange(
             min_version="470.256.02",
             max_version="470.256.02",
@@ -130,6 +136,7 @@ class TestGetCompatiblePackages:
     def test_debian_packages(self):
         """Test Debian driver packages."""
         from nvidia_inst.gpu.compatibility import DriverRange
+
         driver_range = DriverRange(
             min_version="535.154.05",
             max_version=None,
@@ -143,6 +150,7 @@ class TestGetCompatiblePackages:
     def test_opensuse_packages(self):
         """Test openSUSE driver packages."""
         from nvidia_inst.gpu.compatibility import DriverRange
+
         driver_range = DriverRange(
             min_version="535.154.05",
             max_version=None,
@@ -160,7 +168,13 @@ class TestDisableNouveau:
 
     def test_disable_nouveau_no_root(self):
         """Test disable_nouveau fails without root privileges."""
-        with patch("os.geteuid", return_value=1000):
+        with (
+            patch("os.geteuid", return_value=1000),
+            patch("subprocess.run") as mock_run,
+            patch("nvidia_inst.distro.detector.detect_distro") as mock_detect,
+        ):
+            mock_run.side_effect = subprocess.CalledProcessError(1, "sudo")
+            mock_detect.return_value = MagicMock(id="ubuntu")
             result = disable_nouveau()
             assert result is False
 
@@ -168,7 +182,9 @@ class TestDisableNouveau:
     @patch("builtins.open", create=True)
     @patch("subprocess.run")
     @patch("nvidia_inst.distro.detector.detect_distro")
-    def test_disable_nouveau_ubuntu(self, mock_detect, mock_run, mock_open, mock_geteuid):
+    def test_disable_nouveau_ubuntu(
+        self, mock_detect, mock_run, mock_open, mock_geteuid
+    ):
         """Test disable_nouveau on Ubuntu."""
         mock_geteuid.return_value = 0
 
@@ -188,7 +204,9 @@ class TestDisableNouveau:
     @patch("builtins.open", create=True)
     @patch("subprocess.run")
     @patch("nvidia_inst.distro.detector.detect_distro")
-    def test_disable_nouveau_fedora(self, mock_detect, mock_run, mock_open, mock_geteuid):
+    def test_disable_nouveau_fedora(
+        self, mock_detect, mock_run, mock_open, mock_geteuid
+    ):
         """Test disable_nouveau on Fedora uses dracut."""
         mock_geteuid.return_value = 0
 
@@ -230,7 +248,9 @@ class TestDisableNouveau:
     @patch("builtins.open", create=True)
     @patch("subprocess.run")
     @patch("nvidia_inst.distro.detector.detect_distro")
-    def test_disable_nouveau_initramfs_failure(self, mock_detect, mock_run, mock_open, mock_geteuid):
+    def test_disable_nouveau_initramfs_failure(
+        self, mock_detect, mock_run, mock_open, mock_geteuid
+    ):
         """Test disable_nouveau handles initramfs rebuild failure."""
         mock_geteuid.return_value = 0
 
@@ -258,7 +278,9 @@ class TestDisableNouveau:
     @patch("builtins.open", create=True)
     @patch("subprocess.run")
     @patch("nvidia_inst.distro.detector.detect_distro")
-    def test_disable_nouveau_unknown_distro(self, mock_detect, mock_run, mock_open, mock_geteuid):
+    def test_disable_nouveau_unknown_distro(
+        self, mock_detect, mock_run, mock_open, mock_geteuid
+    ):
         """Test disable_nouveau on unknown distro uses update-initramfs."""
         mock_geteuid.return_value = 0
 
