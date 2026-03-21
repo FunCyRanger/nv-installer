@@ -123,7 +123,13 @@ def _query_installed_nvidia_packages(distro_id: str) -> list[str]:
         List of installed NVIDIA package names.
     """
     installed = []
-    patterns = ["nvidia", "xorg-x11-drv-nvidia", "akmod", "x11-video-nvidia"]
+    patterns = ["nvidia", "xorg-x11-drv-nvidia", "x11-video-nvidia"]
+    exclude = [
+        "nvidia-gpu-firmware",
+        "akmods",
+        "nvidia-modprobe",
+        "nvidia-settings",
+    ]
 
     try:
         if distro_id in ("ubuntu", "debian", "linuxmint", "pop"):
@@ -146,7 +152,11 @@ def _query_installed_nvidia_packages(distro_id: str) -> list[str]:
                                     idx = i
                                     break
                             pkg_name = pkg_full[:idx].rstrip("-")
-                            if pkg_name and pkg_name not in installed:
+                            if (
+                                pkg_name
+                                and pkg_name not in installed
+                                and pkg_name not in exclude
+                            ):
                                 installed.append(pkg_name)
 
         elif distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
@@ -160,7 +170,9 @@ def _query_installed_nvidia_packages(distro_id: str) -> list[str]:
                 for line in result.stdout.splitlines():
                     line_lower = line.lower()
                     if any(p in line_lower for p in patterns) and line not in installed:
-                        installed.append(line.strip())
+                        pkg_name = line.strip()
+                        if pkg_name not in exclude:
+                            installed.append(pkg_name)
 
         elif distro_id in ("arch", "manjaro"):
             result = subprocess.run(
@@ -192,7 +204,9 @@ def _query_installed_nvidia_packages(distro_id: str) -> list[str]:
                         any(p in line_lower for p in ["nvidia", "x11-video"])
                         and line not in installed
                     ):
-                        installed.append(line.strip())
+                        pkg_name = line.strip()
+                        if pkg_name not in exclude:
+                            installed.append(pkg_name)
 
     except Exception as e:
         logger.warning(f"Failed to query installed packages: {e}")
@@ -231,17 +245,6 @@ def _cleanup_dkms(distro_id: str) -> None:
                                 capture_output=True,
                                 timeout=60,
                             )
-        elif distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
-            result = subprocess.run(
-                ["akmods", "--remove", "nvidia"],
-                capture_output=True,
-                timeout=60,
-            )
-            if result.returncode != 0:
-                logger.warning(
-                    f"akmods remove failed: {result.stderr.decode() if isinstance(result.stderr, bytes) else result.stderr}"
-                )
-
     except Exception as e:
         logger.warning(f"DKMS cleanup warning: {e}")
 
@@ -310,7 +313,7 @@ def _remove_packages(distro_id: str, packages: list[str]) -> list[str]:
             if distro_id in ("ubuntu", "debian", "linuxmint", "pop"):
                 cmd = ["apt-get", "remove", "--purge", "-y", pkg_pattern]
             elif distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
-                cmd = ["dnf", "remove", "-y", "--", pkg_pattern]
+                cmd = ["dnf", "remove", "-y", pkg_pattern]
             elif distro_id in ("arch", "manjaro"):
                 cmd = ["pacman", "-Rns", "--noconfirm", pkg_pattern]
             elif distro_id in ("opensuse", "sles"):
