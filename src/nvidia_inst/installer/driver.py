@@ -187,6 +187,140 @@ def _check_nouveau_packages() -> bool:
     return False
 
 
+def check_nvidia_open_installed() -> bool:
+    """Check if NVIDIA Open (nvidia-open) kernel module is installed.
+
+    Returns:
+        True if nvidia-open is installed, False otherwise.
+    """
+    nvidia_open_pkgs = {
+        "ubuntu": ["nvidia-driver-535-open", "nvidia-driver-550-open"],
+        "debian": ["nvidia-driver-open"],
+        "fedora": ["xorg-x11-drv-nvidia-open"],
+        "centos": ["xorg-x11-drv-nvidia-open"],
+        "rhel": ["xorg-x11-drv-nvidia-open"],
+        "rocky": ["xorg-x11-drv-nvidia-open"],
+        "alma": ["xorg-x11-drv-nvidia-open"],
+        "arch": ["nvidia-open"],
+        "manjaro": ["nvidia-open"],
+        "opensuse": ["x11-video-nvidiaG06"],
+        "sles": ["x11-video-nvidiaG06"],
+    }
+
+    from nvidia_inst.distro.detector import detect_distro
+
+    distro = detect_distro()
+    distro_id = distro.id
+    packages = nvidia_open_pkgs.get(distro_id, [])
+
+    if not packages:
+        return False
+
+    try:
+        if distro_id in ("ubuntu", "debian", "linuxmint", "pop"):
+            result = subprocess.run(
+                ["dpkg", "-l"] + packages,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                for line in result.stdout.splitlines():
+                    parts = line.split()
+                    if len(parts) >= 2 and parts[0] == "ii":
+                        return True
+        elif distro_id in ("fedora", "centos", "rhel", "rocky", "alma"):
+            result = subprocess.run(
+                ["rpm", "-q"] + packages,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                return True
+        elif distro_id in ("arch", "manjaro", "opensuse", "sles"):
+            result = subprocess.run(
+                ["pacman", "-Q"] + packages,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                return True
+    except Exception:
+        pass
+
+    return False
+
+
+def check_nvidia_open_available() -> bool:
+    """Check if NVIDIA Open (nvidia-open) is available in repos.
+
+    Returns:
+        True if nvidia-open packages are available, False otherwise.
+    """
+    from nvidia_inst.distro.detector import detect_distro
+
+    distro = detect_distro()
+    distro_id = distro.id
+
+    if distro_id in ("ubuntu", "debian", "linuxmint", "pop"):
+        return _check_apt_nvidia_open()
+    elif distro_id in ("fedora", "centos", "rhel", "rocky", "alma"):
+        return _check_dnf_nvidia_open()
+    elif distro_id in ("arch", "manjaro"):
+        return _check_pacman_nvidia_open()
+    elif distro_id in ("opensuse", "sles"):
+        return True
+
+    return False
+
+
+def _check_apt_nvidia_open() -> bool:
+    """Check if nvidia-open packages are available in APT repos."""
+    try:
+        result = subprocess.run(
+            ["apt-cache", "policy", "nvidia-driver-535-open"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            return "nvidia-driver-535-open" in result.stdout
+    except Exception:
+        pass
+    return False
+
+
+def _check_dnf_nvidia_open() -> bool:
+    """Check if nvidia-open packages are available in DNF repos."""
+    try:
+        result = subprocess.run(
+            ["dnf", "search", "xorg-x11-drv-nvidia-open"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            return "xorg-x11-drv-nvidia-open" in result.stdout
+    except Exception:
+        pass
+    return False
+
+
+def _check_pacman_nvidia_open() -> bool:
+    """Check if nvidia-open is available in pacman repos."""
+    try:
+        result = subprocess.run(
+            ["pacman", "-Ss", "nvidia-open"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            return "nvidia-open" in result.stdout
+    except Exception:
+        pass
+    return False
+
+
 def check_nonfree_available() -> bool:
     """Check if proprietary (nonfree) driver is available in repos.
 
@@ -283,12 +417,15 @@ def get_current_driver_type() -> str:
 
     Returns:
         'proprietary' - NVIDIA proprietary driver loaded
+        'nvidia_open' - NVIDIA Open driver loaded
         'nouveau'     - Nouveau open-source driver loaded
         'none'        - No NVIDIA driver detected
     """
     from nvidia_inst.installer.validation import is_nvidia_working
 
     if is_nvidia_working().is_working:
+        if check_nvidia_open_installed():
+            return "nvidia_open"
         return "proprietary"
     if check_nouveau():
         return "nouveau"
@@ -513,3 +650,74 @@ def _get_opensuse_packages(driver_range: DriverRange) -> list[str]:
         return ["x11-video-nvidiaG04"]
 
     return ["x11-video-nvidiaG05", "nvidia-computeG05"]
+
+
+def get_nvidia_open_packages(
+    distro_id: str,
+    driver_range: DriverRange,
+) -> list[str]:
+    """Get NVIDIA Open packages for distribution.
+
+    Args:
+        distro_id: Distribution ID.
+        driver_range: Compatible driver version range.
+
+    Returns:
+        List of nvidia-open package names.
+    """
+    if distro_id in ("ubuntu", "linuxmint", "pop"):
+        return _get_ubuntu_nvidia_open_packages(driver_range)
+    elif distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
+        return _get_fedora_nvidia_open_packages()
+    elif distro_id in ("arch", "manjaro"):
+        return ["nvidia-open", "nvidia-settings"]
+    elif distro_id in ("opensuse", "sles"):
+        return ["x11-video-nvidiaG06", "nvidia-computeG06"]
+
+    return []
+
+
+def _get_ubuntu_nvidia_open_packages(driver_range: DriverRange) -> list[str]:
+    """Get Ubuntu NVIDIA Open packages."""
+    if driver_range.max_branch == "580":
+        return ["nvidia-driver-550-open", "nvidia-dkms-550"]
+    if driver_range.max_branch == "590":
+        return ["nvidia-driver-535-open", "nvidia-dkms-535"]
+
+    return ["nvidia-driver-535-open", "nvidia-dkms-535"]
+
+
+def _get_fedora_nvidia_open_packages() -> list[str]:
+    """Get Fedora NVIDIA Open packages."""
+    return [
+        "akmod-nvidia",
+        "xorg-x11-drv-nvidia-open",
+        "xorg-x11-drv-nvidia-open-cuda",
+    ]
+
+
+def get_nouveau_packages(distro_id: str) -> list[str]:
+    """Get Nouveau packages for distribution.
+
+    Args:
+        distro_id: Distribution ID.
+
+    Returns:
+        List of nouveau package names.
+    """
+    nouveau_pkg_map = {
+        "ubuntu": ["xserver-xorg-video-nouveau"],
+        "debian": ["xserver-xorg-video-nouveau"],
+        "linuxmint": ["xserver-xorg-video-nouveau"],
+        "pop": ["xserver-xorg-video-nouveau"],
+        "fedora": ["xorg-x11-drv-nouveau"],
+        "centos": ["xorg-x11-drv-nouveau"],
+        "rhel": ["xorg-x11-drv-nouveau"],
+        "rocky": ["xorg-x11-drv-nouveau"],
+        "alma": ["xorg-x11-drv-nouveau"],
+        "arch": ["xf86-video-nouveau"],
+        "manjaro": ["xf86-video-nouveau"],
+        "opensuse": ["xf86-video-nouveau"],
+        "sles": ["xf86-video-nouveau"],
+    }
+    return nouveau_pkg_map.get(distro_id, [])

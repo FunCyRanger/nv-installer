@@ -26,9 +26,13 @@ from nvidia_inst.gpu.detector import (
 )
 from nvidia_inst.gpu.matrix.data import GPUGenerationInfo
 from nvidia_inst.installer.driver import (
+    check_nonfree_available,
+    check_nvidia_open_available,
     check_secure_boot,
     get_compatible_driver_packages,
     get_current_driver_type,
+    get_nouveau_packages,
+    get_nvidia_open_packages,
 )
 from nvidia_inst.installer.prerequisites import PrerequisitesChecker
 from nvidia_inst.installer.secureboot import (
@@ -57,6 +61,7 @@ class DriverStatus(Enum):
 
     OPTIMAL = "optimal"
     WRONG_BRANCH = "wrong_branch"
+    NVIDIA_OPEN_ACTIVE = "nvidia_open_active"
     NOUVEAU_ACTIVE = "nouveau_active"
     BROKEN_INSTALL = "broken_install"
     NOTHING = "nothing"
@@ -83,6 +88,7 @@ class DriverState:
     suggested_packages: list[str] | None
     options: list[DriverOption]
     message: str
+    cuda_range: str | None = None
 
 
 logger = get_logger(__name__)
@@ -279,6 +285,15 @@ def print_compatibility_info(
     print(f"  {'Compatible' if not driver_range.is_eol else 'Limited (EOL GPU)'}")
 
 
+def _get_cuda_range_str(driver_range: DriverRange) -> str | None:
+    """Format CUDA range for display."""
+    if not driver_range.cuda_min:
+        return None
+    if driver_range.cuda_max:
+        return f"CUDA {driver_range.cuda_min}-{driver_range.cuda_max}"
+    return f"CUDA {driver_range.cuda_min}+"
+
+
 def detect_driver_state(
     gpu: GPUInfo,
     driver_range: DriverRange,
@@ -296,6 +311,9 @@ def detect_driver_state(
     """
     driver_type = get_current_driver_type()
     working = is_nvidia_working()
+    cuda_range = _get_cuda_range_str(driver_range)
+    nonfree_available = check_nonfree_available()
+    nvidia_open_available = check_nvidia_open_available()
 
     if working.is_working:
         compatible = (
@@ -312,14 +330,11 @@ def detect_driver_state(
                 is_compatible=True,
                 is_optimal=True,
                 suggested_packages=suggested,
-                options=[
-                    DriverOption(1, "Upgrade to latest", "upgrade", recommended=True),
-                    DriverOption(2, "Keep current driver", "keep"),
-                    DriverOption(
-                        3, "Switch to Nouveau (open-source)", "revert_nouveau"
-                    ),
-                ],
+                options=_build_optimal_options(
+                    driver_type, cuda_range, nvidia_open_available
+                ),
                 message=f"NVIDIA driver {working.driver_version} is working optimally",
+                cuda_range=cuda_range,
             )
         else:
             return DriverState(
@@ -328,19 +343,11 @@ def detect_driver_state(
                 is_compatible=False,
                 is_optimal=False,
                 suggested_packages=suggested,
-                options=[
-                    DriverOption(
-                        1,
-                        f"Install correct branch ({driver_range.max_branch})",
-                        "install",
-                        recommended=True,
-                    ),
-                    DriverOption(2, "Keep current driver", "keep"),
-                    DriverOption(
-                        3, "Switch to Nouveau (open-source)", "revert_nouveau"
-                    ),
-                ],
+                options=_build_wrong_branch_options(
+                    driver_range, cuda_range, nvidia_open_available, nonfree_available
+                ),
                 message=f"Driver {working.driver_version} may not be optimal for {gpu.model}",
+                cuda_range=cuda_range,
             )
 
     elif driver_type == "nouveau":
@@ -351,47 +358,278 @@ def detect_driver_state(
             is_compatible=False,
             is_optimal=False,
             suggested_packages=suggested,
-            options=[
-                DriverOption(
-                    1, "Install proprietary driver", "install", recommended=True
-                ),
-                DriverOption(2, "Keep Nouveau driver", "keep"),
-            ],
+            options=_build_nouveau_options(
+                cuda_range, nvidia_open_available, nonfree_available
+            ),
             message="Nouveau (open-source) driver is active",
+            cuda_range=cuda_range,
+        )
+
+    elif driver_type == "nvidia_open":
+        suggested = get_compatible_driver_packages(distro_id, driver_range)
+        return DriverState(
+            status=DriverStatus.NVIDIA_OPEN_ACTIVE,
+            current_version=working.driver_version if working.is_working else None,
+            is_compatible=True,
+            is_optimal=True,
+            suggested_packages=suggested,
+            options=_build_nvidia_open_options(cuda_range, nonfree_available),
+            message="NVIDIA Open driver is active",
+            cuda_range=cuda_range,
         )
 
     else:
-        from nvidia_inst.installer.driver import check_nonfree_available
-
         suggested = get_compatible_driver_packages(distro_id, driver_range)
-        nonfree_available = check_nonfree_available()
+        return DriverState(
+            status=DriverStatus.NOTHING,
+            current_version=None,
+            is_compatible=False,
+            is_optimal=False,
+            suggested_packages=suggested,
+            options=_build_nothing_options(
+                cuda_range, nvidia_open_available, nonfree_available
+            ),
+            message="No NVIDIA driver installed"
+            + (" (non-free repos not enabled)" if not nonfree_available else ""),
+            cuda_range=cuda_range,
+        )
 
+
+def _build_optimal_options(
+    driver_type: str,
+    cuda_range: str | None,
+    nvidia_open_available: bool,
+) -> list[DriverOption]:
+    """Build options for optimal driver state."""
+    options = [
+        DriverOption(1, "Upgrade to latest", "upgrade", recommended=True),
+        DriverOption(2, "Keep current driver", "keep"),
+    ]
+
+    cuda_suffix = f" ({cuda_range})" if cuda_range else ""
+
+    if nvidia_open_available and driver_type != "nvidia_open":
+        options.append(
+            DriverOption(
+                len(options) + 1,
+                f"Switch to NVIDIA Open{cuda_suffix}"
+                if cuda_suffix
+                else "Switch to NVIDIA Open (open-source kernel module)",
+                "switch_nvidia_open",
+            )
+        )
+
+    options.append(
+        DriverOption(
+            len(options) + 1,
+            "Switch to Nouveau (open-source)"
+            + (f" ({cuda_range})" if cuda_range else ""),
+            "switch_nouveau",
+        )
+    )
+
+    return options
+
+
+def _build_wrong_branch_options(
+    driver_range: DriverRange,
+    cuda_range: str | None,
+    nvidia_open_available: bool,
+    nonfree_available: bool,
+) -> list[DriverOption]:
+    """Build options for wrong branch driver state."""
+    cuda_suffix = f" ({cuda_range})" if cuda_range else ""
+
+    options = []
+
+    if nonfree_available:
+        branch_desc = (
+            f"Install correct branch ({driver_range.max_branch}){cuda_suffix}"
+            if cuda_suffix
+            else f"Install correct branch ({driver_range.max_branch})"
+        )
+        options.append(DriverOption(1, branch_desc, "install", recommended=True))
+    else:
+        options.append(
+            DriverOption(
+                1,
+                f"Enable non-free repos + install correct branch ({driver_range.max_branch}){cuda_suffix}",
+                "install",
+                recommended=True,
+            )
+        )
+
+    options.append(DriverOption(2, "Keep current driver", "keep"))
+
+    if nvidia_open_available:
+        open_desc = (
+            f"Switch to NVIDIA Open{cuda_suffix}"
+            if cuda_suffix
+            else "Switch to NVIDIA Open"
+        )
+        options.append(DriverOption(3, open_desc, "switch_nvidia_open"))
+
+    nouveau_suffix = cuda_suffix if cuda_range else ""
+    options.append(
+        DriverOption(
+            len(options) + 1,
+            f"Switch to Nouveau (open-source){nouveau_suffix}",
+            "switch_nouveau",
+        )
+    )
+
+    return options
+
+
+def _build_nouveau_options(
+    cuda_range: str | None,
+    nvidia_open_available: bool,
+    nonfree_available: bool,
+) -> list[DriverOption]:
+    """Build options for Nouveau active state."""
+    cuda_suffix = f" ({cuda_range})" if cuda_range else ""
+    options = []
+
+    if nonfree_available:
+        options.append(
+            DriverOption(
+                1,
+                f"Switch to proprietary driver{cuda_suffix}"
+                if cuda_suffix
+                else "Switch to proprietary driver",
+                "install",
+                recommended=True,
+            )
+        )
+    else:
+        options.append(
+            DriverOption(
+                1,
+                f"Enable non-free repos + switch to proprietary{cuda_suffix}"
+                if cuda_suffix
+                else "Enable non-free repos + switch to proprietary",
+                "install",
+                recommended=True,
+            )
+        )
+
+    if nvidia_open_available:
+        open_suffix = cuda_suffix if cuda_range else ""
+        options.append(
+            DriverOption(
+                len(options) + 1,
+                f"Switch to NVIDIA Open{open_suffix}"
+                if cuda_range
+                else "Switch to NVIDIA Open",
+                "install_nvidia_open",
+            )
+        )
+
+    options.append(DriverOption(len(options) + 1, "Keep Nouveau (open-source)", "keep"))
+
+    return options
+
+
+def _build_nvidia_open_options(
+    cuda_range: str | None,
+    nonfree_available: bool,
+) -> list[DriverOption]:
+    """Build options for NVIDIA Open active state."""
+    cuda_suffix = f" ({cuda_range})" if cuda_range else ""
+    options = [
+        DriverOption(1, "Upgrade to latest", "upgrade", recommended=True),
+        DriverOption(2, "Keep NVIDIA Open", "keep"),
+    ]
+
+    if nonfree_available:
+        options.append(
+            DriverOption(
+                3,
+                f"Switch to proprietary{cuda_suffix}"
+                if cuda_suffix
+                else "Switch to proprietary driver",
+                "install",
+            )
+        )
+
+    options.append(
+        DriverOption(
+            len(options) + 1,
+            f"Switch to Nouveau (open-source){cuda_suffix}"
+            if cuda_suffix
+            else "Switch to Nouveau (open-source)",
+            "switch_nouveau",
+        )
+    )
+
+    return options
+
+
+def _build_nothing_options(
+    cuda_range: str | None,
+    nvidia_open_available: bool,
+    nonfree_available: bool,
+) -> list[DriverOption]:
+    """Build options for no driver installed state."""
+    cuda_suffix = f" ({cuda_range})" if cuda_range else ""
+    options = []
+
+    if nonfree_available:
+        options.append(
+            DriverOption(
+                1,
+                f"Install proprietary driver{cuda_suffix}"
+                if cuda_suffix
+                else "Install proprietary driver",
+                "install",
+                recommended=True,
+            )
+        )
+    else:
+        options.append(
+            DriverOption(
+                1,
+                f"Enable non-free repos + install proprietary{cuda_suffix}"
+                if cuda_suffix
+                else "Enable non-free repos + install proprietary driver",
+                "install",
+                recommended=True,
+            )
+        )
+
+    if nvidia_open_available:
+        open_suffix = cuda_suffix if cuda_range else ""
         if nonfree_available:
-            return DriverState(
-                status=DriverStatus.NOTHING,
-                current_version=None,
-                is_compatible=False,
-                is_optimal=False,
-                suggested_packages=suggested,
-                options=[
-                    DriverOption(1, "Install driver", "install", recommended=True),
-                    DriverOption(2, "Cancel", "cancel"),
-                ],
-                message="No NVIDIA driver installed",
+            options.append(
+                DriverOption(
+                    len(options) + 1,
+                    f"Install NVIDIA Open{open_suffix}"
+                    if cuda_range
+                    else "Install NVIDIA Open",
+                    "install_nvidia_open",
+                )
             )
         else:
-            return DriverState(
-                status=DriverStatus.NOTHING,
-                current_version=None,
-                is_compatible=False,
-                is_optimal=False,
-                suggested_packages=suggested,
-                options=[
-                    DriverOption(1, "Enable non-free repos and install driver", "install", recommended=True),
-                    DriverOption(2, "Cancel", "cancel"),
-                ],
-                message="No NVIDIA driver installed (non-free repos not enabled)",
+            options.append(
+                DriverOption(
+                    len(options) + 1,
+                    f"Enable non-free repos + install NVIDIA Open{open_suffix}"
+                    if cuda_range
+                    else "Enable non-free repos + install NVIDIA Open",
+                    "install_nvidia_open",
+                )
             )
+
+    nouveau_suffix = cuda_suffix if cuda_range else " (no CUDA)"
+    options.append(
+        DriverOption(
+            len(options) + 1,
+            f"Install Nouveau (open-source){nouveau_suffix}",
+            "install_nouveau",
+        )
+    )
+
+    return options
 
 
 def show_driver_options(state: DriverState) -> int:
@@ -818,6 +1056,90 @@ def _dry_run_change(
     print("  sudo nvidia-inst")
 
 
+def _dry_run_nvidia_open_install(
+    distro: DistroInfo,
+    packages: list[str],
+) -> None:
+    """Show dry-run output for NVIDIA Open installation."""
+    print("\n" + "=" * 50)
+    print(" DRY-RUN MODE - NVIDIA Open Installation")
+    print("=" * 50)
+
+    print(f"\nTarget packages: {' '.join(packages)}")
+
+    print("\nSteps to execute manually:")
+    driver_type = get_current_driver_type()
+    if driver_type in ("proprietary", "nvidia_open"):
+        if distro.id in ("ubuntu", "debian"):
+            print("  1. sudo apt remove --purge -y nvidia-driver-* nvidia-dkms-*")
+        elif distro.id in ("fedora", "rhel", "centos"):
+            print("  1. sudo dnf remove -y akmod-nvidia xorg-x11-drv-nvidia*")
+        elif distro.id in ("arch", "manjaro"):
+            print("  1. sudo pacman -Rns --noconfirm nvidia nvidia-utils")
+        elif distro.id in ("opensuse", "sles"):
+            print("  1. sudo zypper remove -y x11-video-nvidiaG05")
+        print()
+
+    if distro.id in ("ubuntu", "debian"):
+        print(f"  2. sudo apt install -y {' '.join(packages)}")
+        print("  3. sudo update-initramfs -u")
+    elif distro.id in ("fedora", "rhel", "centos"):
+        print(f"  2. sudo dnf install -y {' '.join(packages)}")
+        print("  3. sudo dracut -f --regenerate-all")
+    elif distro.id in ("arch", "manjaro"):
+        print(f"  2. sudo pacman -S --noconfirm {' '.join(packages)}")
+        print("  3. sudo mkinitcpio -P")
+    elif distro.id in ("opensuse", "sles"):
+        print(f"  2. sudo zypper install -y {' '.join(packages)}")
+        print("  3. sudo dracut -f --regenerate-all")
+    print("  4. sudo reboot")
+
+    print("\nOr run this script without --dry-run:")
+    print("  sudo nvidia-inst")
+
+
+def _dry_run_nouveau_install(
+    distro: DistroInfo,
+    packages: list[str],
+) -> None:
+    """Show dry-run output for Nouveau installation."""
+    print("\n" + "=" * 50)
+    print(" DRY-RUN MODE - Nouveau Installation")
+    print("=" * 50)
+
+    print(f"\nTarget packages: {' '.join(packages)}")
+
+    print("\nSteps to execute manually:")
+    driver_type = get_current_driver_type()
+    if driver_type in ("proprietary", "nvidia_open"):
+        if distro.id in ("ubuntu", "debian"):
+            print("  1. sudo apt remove --purge -y nvidia-driver-* nvidia-dkms-*")
+        elif distro.id in ("fedora", "rhel", "centos"):
+            print("  1. sudo dnf remove -y akmod-nvidia xorg-x11-drv-nvidia*")
+        elif distro.id in ("arch", "manjaro"):
+            print("  1. sudo pacman -Rns --noconfirm nvidia nvidia-utils")
+        elif distro.id in ("opensuse", "sles"):
+            print("  1. sudo zypper remove -y x11-video-nvidiaG05 x11-video-nvidiaG06")
+        print()
+
+    if distro.id in ("ubuntu", "debian"):
+        print(f"  2. sudo apt install -y {' '.join(packages)}")
+        print("  3. sudo update-initramfs -u")
+    elif distro.id in ("fedora", "rhel", "centos"):
+        print(f"  2. sudo dnf install -y {' '.join(packages)}")
+        print("  3. sudo dracut -f --regenerate-all")
+    elif distro.id in ("arch", "manjaro"):
+        print(f"  2. sudo pacman -S --noconfirm {' '.join(packages)}")
+        print("  3. sudo mkinitcpio -P")
+    elif distro.id in ("opensuse", "sles"):
+        print(f"  2. sudo zypper install -y {' '.join(packages)}")
+        print("  3. sudo dracut -f --regenerate-all")
+    print("  4. sudo reboot")
+
+    print("\nOr run this script without --dry-run:")
+    print("  sudo nvidia-inst")
+
+
 def _dry_run_revert(distro: DistroInfo) -> None:
     """Show dry-run output for reverting to Nouveau."""
     from nvidia_inst.installer.uninstaller import _get_packages_to_remove
@@ -976,6 +1298,77 @@ def execute_driver_change(
                 )
 
         print("\n✓ Driver installed successfully")
+        _prompt_reboot()
+        return 0
+
+    if option.action in ("install_nvidia_open", "switch_nvidia_open"):
+        packages = get_nvidia_open_packages(distro.id, driver_range)
+
+        if dry_run:
+            _dry_run_nvidia_open_install(distro, packages)
+            return 0
+
+        from nvidia_inst.utils.permissions import require_root
+
+        if not require_root(interactive=True):
+            print("\n[ERROR] Root privileges required to install drivers.")
+            return 1
+
+        driver_type = get_current_driver_type()
+        if driver_type in ("proprietary", "nvidia_open"):
+            print("\nRemoving old driver packages...")
+            packages_to_remove = _get_packages_to_remove(distro.id)
+            removed = _remove_packages(distro.id, packages_to_remove)
+            if removed:
+                print(f"  Removed: {', '.join(removed)}")
+
+        if driver_type == "nouveau":
+            print("\nNouveau is active. Installing NVIDIA Open driver.")
+
+        print(f"\nInstalling: {' '.join(packages)}")
+        pkg_manager = get_package_manager()
+        try:
+            pkg_manager.install(packages)
+        except Exception as e:
+            logger.error(f"Installation failed: {e}")
+            print(f"Installation failed: {e}")
+            return 1
+
+        print("\nRebuilding initramfs...")
+        if not _rebuild_initramfs(distro.id):
+            print("[WARNING] Initramfs rebuild had issues. Reboot may fail.")
+
+        print("\n✓ NVIDIA Open installed successfully")
+        _prompt_reboot()
+        return 0
+
+    if option.action in ("install_nouveau", "switch_nouveau"):
+        packages = get_nouveau_packages(distro.id)
+
+        if dry_run:
+            _dry_run_nouveau_install(distro, packages)
+            return 0
+
+        from nvidia_inst.utils.permissions import require_root
+
+        if not require_root(interactive=True):
+            print("\n[ERROR] Root privileges required to install drivers.")
+            return 1
+
+        print("\nInstalling Nouveau driver...")
+        pkg_manager = get_package_manager()
+        try:
+            pkg_manager.install(packages)
+        except Exception as e:
+            logger.error(f"Installation failed: {e}")
+            print(f"Installation failed: {e}")
+            return 1
+
+        print("\nRebuilding initramfs...")
+        if not _rebuild_initramfs(distro.id):
+            print("[WARNING] Initramfs rebuild had issues. Reboot may fail.")
+
+        print("\n✓ Nouveau driver installed successfully")
         _prompt_reboot()
         return 0
 
