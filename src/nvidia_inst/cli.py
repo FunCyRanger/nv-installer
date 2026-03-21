@@ -28,7 +28,6 @@ from nvidia_inst.gpu.hybrid import (
     detect_hybrid,
     get_native_tool,
 )
-from nvidia_inst.gpu.matrix.data import GPUGenerationInfo
 from nvidia_inst.installer.driver import (
     check_nonfree_available,
     check_nvidia_open_available,
@@ -40,8 +39,6 @@ from nvidia_inst.installer.driver import (
 )
 from nvidia_inst.installer.hybrid import (
     get_hybrid_packages,
-    get_power_profile,
-    is_prime_env_configured,
     set_power_profile,
 )
 from nvidia_inst.installer.prerequisites import PrerequisitesChecker
@@ -172,39 +169,15 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--fix",
-        action="store_true",
-        help="Automatically fix missing repositories",
-    )
-
-    parser.add_argument(
         "--revert-to-nouveau",
         action="store_true",
         help="Switch from proprietary driver to Nouveau (open-source)",
     )
 
     parser.add_argument(
-        "--update-matrix",
-        action="store_true",
-        help="Force update of compatibility matrix",
-    )
-
-    parser.add_argument(
-        "--matrix-info",
-        action="store_true",
-        help="Show compatibility matrix information",
-    )
-
-    parser.add_argument(
         "--power-profile",
         choices=["intel", "hybrid", "nvidia"],
         help="Set hybrid graphics power profile",
-    )
-
-    parser.add_argument(
-        "--show-hybrid-info",
-        action="store_true",
-        help="Show hybrid graphics detection information",
     )
 
     return parser.parse_args()
@@ -267,6 +240,20 @@ def check_compatibility() -> int:
 
     if driver_range.is_eol:
         print(f"\nWARNING: {driver_range.eol_message}")
+
+    hybrid_info = detect_hybrid(distro.id)
+    if hybrid_info:
+        print("\n" + "-" * 50)
+        print("HYBRID GRAPHICS DETECTED")
+        print("-" * 50)
+        print(f"System Type: {hybrid_info.system_type.capitalize()}")
+        print(
+            f"iGPU: {hybrid_info.igpu_type.upper() if hybrid_info.igpu_type else 'N/A'}"
+        )
+        print(f"dGPU: {hybrid_info.dgpu_model}")
+        native_tool, _, _ = get_native_tool(distro.id)
+        print(f"Native Tool: {native_tool or 'Environment file'}")
+        print("\nUse --power-profile to configure: intel, hybrid, or nvidia")
 
     return 0
 
@@ -1647,71 +1634,6 @@ def update_matrix_on_startup() -> None:
         logger.debug(f"Matrix update check failed: {e}")
 
 
-def show_matrix_info() -> int:
-    """Show compatibility matrix information."""
-    try:
-        from nvidia_inst.gpu.matrix.manager import MatrixManager
-
-        manager = MatrixManager()
-
-        print("\n" + "=" * 60)
-        print(" Compatibility Matrix Information")
-        print("=" * 60)
-
-        print(f"\nVersion: {manager.get_version()}")
-        print(f"Last Updated: {manager.get_last_update_time() or 'unknown'}")
-        print(f"Data Source: {'Online' if manager.is_online_data else 'Fallback'}")
-
-        branches = manager.get_all_branches()
-        if branches:
-            print("\nDriver Branches:")
-            for branch in sorted(branches.keys()):
-                branch_info = branches[branch]
-                eol = f" (EOL: {branch_info.eol_date})" if branch_info.eol_date else ""
-                print(
-                    f"  {branch}: {branch_info.name} - {branch_info.latest_version}{eol}"
-                )
-
-        generations = manager.get_all_generations()
-        if generations:
-            print("\nGPU Generations:")
-            for name in sorted(generations.keys()):
-                gen_info: GPUGenerationInfo = generations[name]
-                status_icon = {"full": "[+]", "limited": "[~]", "eol": "[-]"}
-                icon = status_icon.get(gen_info.status.value, "[?]")
-                print(f"  {icon} {gen_info.display_name}")
-
-        print("\n" + "=" * 60 + "\n")
-        return 0
-
-    except Exception as e:
-        logger.error(f"Failed to load matrix info: {e}")
-        print(f"Error: {e}")
-        return 1
-
-
-def update_matrix_cli() -> int:
-    """Update compatibility matrix from online sources."""
-    try:
-        from nvidia_inst.gpu.matrix.manager import MatrixManager
-
-        manager = MatrixManager(force_update=True)
-        updated, message = manager.check_for_updates()
-
-        if updated:
-            print("\nMatrix updated successfully!")
-            print(f"Version: {manager.get_version()}")
-        else:
-            print(f"\nMatrix update: {message}")
-
-        return 0
-
-    except Exception as e:
-        logger.error(f"Failed to update matrix: {e}")
-        print(f"Error: {e}")
-        return 1
-
-
 def revert_to_nouveau_cli() -> int:
     """Switch from proprietary Nvidia driver to Nouveau open-source driver."""
     try:
@@ -1768,64 +1690,6 @@ def revert_to_nouveau_cli() -> int:
             print(f"  - {err}")
 
     return 0 if result.success else 1
-
-
-def show_hybrid_info_cli() -> int:
-    """Show hybrid graphics detection information.
-
-    Returns:
-        0 on success, 1 on failure.
-    """
-    try:
-        distro = detect_distro()
-    except DistroDetectionError:
-        print("[ERROR] Could not detect distribution")
-        return 1
-
-    hybrid_info = detect_hybrid(distro.id)
-
-    if not hybrid_info:
-        print("\nNo hybrid graphics detected.")
-        print("This system has only a single GPU configuration.")
-        return 0
-
-    native_tool, _, _ = get_native_tool(distro.id)
-
-    print("\n" + "=" * 50)
-    print("HYBRID GRAPHICS DETECTION")
-    print("=" * 50)
-
-    print(f"\nSystem Type: {hybrid_info.system_type.capitalize()}")
-    print(
-        f"Integrated GPU: {hybrid_info.igpu_type.upper() if hybrid_info.igpu_type else 'N/A'} ({hybrid_info.igpu_model})"
-    )
-    print(f"Discrete GPU: {hybrid_info.dgpu_model}")
-    print(f"NVIDIA GPUs: {hybrid_info.dgpu_count}")
-
-    print(f"\nNative Tool: {native_tool or 'None (using environment file)'}")
-
-    if hybrid_info.needs_install:
-        print("\n[NOTE] Service package needs to be installed for full functionality.")
-
-    if native_tool:
-        current_mode = get_power_profile(native_tool)
-        if current_mode:
-            print(f"Current Mode: {current_mode}")
-
-    print("\nAvailable Modes:")
-    for mode in hybrid_info.available_modes:
-        print(f"  - {mode}")
-
-    print(f"\nEnvironment File: {hybrid_info.env_file_path}")
-    print(f"PRIME Configured: {'Yes' if is_prime_env_configured() else 'No'}")
-
-    print("\n" + "=" * 50)
-    print("\nUsage:")
-    print("  --power-profile intel   Use integrated GPU only")
-    print("  --power-profile hybrid  iGPU + dGPU on-demand (recommended)")
-    print("  --power-profile nvidia Use dGPU always")
-
-    return 0
 
 
 def set_power_profile_cli(profile: str) -> int:
@@ -1919,17 +1783,8 @@ def main() -> int:
 
     logger.info("Starting nvidia-inst")
 
-    if args.matrix_info:
-        return show_matrix_info()
-
-    if args.show_hybrid_info:
-        return show_hybrid_info_cli()
-
     if args.power_profile:
         return set_power_profile_cli(args.power_profile)
-
-    if args.update_matrix:
-        return update_matrix_cli()
 
     if args.revert_to_nouveau:
         if not args.dry_run and not require_root(interactive=True):

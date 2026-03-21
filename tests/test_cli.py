@@ -125,14 +125,6 @@ class TestParseArgs:
         args = parse_args()
         assert args.dry_run is True
 
-    def test_fix_flag(self, monkeypatch):
-        """Test --fix flag."""
-        monkeypatch.setattr(sys, "argv", ["nvidia-inst", "--fix"])
-        from nvidia_inst.cli import parse_args
-
-        args = parse_args()
-        assert args.fix is True
-
     def test_revert_to_nouveau_flag(self, monkeypatch):
         """Test --revert-to-nouveau flag."""
         monkeypatch.setattr(sys, "argv", ["nvidia-inst", "--revert-to-nouveau"])
@@ -140,22 +132,6 @@ class TestParseArgs:
 
         args = parse_args()
         assert args.revert_to_nouveau is True
-
-    def test_update_matrix_flag(self, monkeypatch):
-        """Test --update-matrix flag."""
-        monkeypatch.setattr(sys, "argv", ["nvidia-inst", "--update-matrix"])
-        from nvidia_inst.cli import parse_args
-
-        args = parse_args()
-        assert args.update_matrix is True
-
-    def test_matrix_info_flag(self, monkeypatch):
-        """Test --matrix-info flag."""
-        monkeypatch.setattr(sys, "argv", ["nvidia-inst", "--matrix-info"])
-        from nvidia_inst.cli import parse_args
-
-        args = parse_args()
-        assert args.matrix_info is True
 
     def test_combined_flags(self, monkeypatch):
         """Test multiple flags combined."""
@@ -303,24 +279,3 @@ class TestPrintCompatibilityInfo:
         assert "Ubuntu" in captured.out
         assert "RTX 3080" in captured.out
         assert "535.154.05" in captured.out
-
-
-class TestShowMatrixInfo:
-    """Tests for matrix info display."""
-
-    def test_show_matrix_info_returns_int(self, monkeypatch, capsys):
-        """Test show_matrix_info returns an integer."""
-        monkeypatch.setattr(
-            "nvidia_inst.gpu.matrix.manager.MatrixManager",
-            lambda: MagicMock(
-                get_version=lambda: "1.0.0",
-                get_last_update_time=lambda: "2024-01-01",
-                is_online_data=False,
-                get_all_branches=lambda: {},
-                get_all_generations=lambda: {},
-            ),
-        )
-        from nvidia_inst.cli import show_matrix_info
-
-        result = show_matrix_info()
-        assert isinstance(result, int)

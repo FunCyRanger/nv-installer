@@ -35,8 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `--install` - Install driver
   - `--dry-run` - Simulate without changes
   - `--revert-to-nouveau` - Switch to Nouveau driver
-  - `--matrix-info` - Show compatibility matrix
-  - `--update-matrix` - Update matrix from online sources
+  - Hybrid graphics detection (auto-shown with `--check`)
+  - `--power-profile` - Set hybrid graphics mode
 
 ### Tested Configurations
 

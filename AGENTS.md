@@ -146,11 +146,13 @@ if hybrid_info:
 ### CLI Commands
 
 ```bash
-nvidia-inst --show-hybrid-info       # Show hybrid detection results
+nvidia-inst --check                  # Check compatibility (shows hybrid info if detected)
 nvidia-inst --power-profile intel   # iGPU only
 nvidia-inst --power-profile hybrid  # iGPU + dGPU on-demand
 nvidia-inst --power-profile nvidia  # dGPU always
 ```
+
+**Note**: Hybrid graphics info is automatically shown during `--check` when hybrid is detected.
 
 ### Running Apps on dGPU
 

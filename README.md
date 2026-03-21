@@ -90,17 +90,12 @@ nvidia-inst uses a versioned compatibility matrix to determine the correct drive
 
 ### Matrix Management
 
+The compatibility matrix is automatically updated on startup. For manual control:
+
 ```bash
-# Check matrix status
-nvidia-inst --matrix-info
-make matrix-check
-
-# Update matrix from online sources
-nvidia-inst --update-matrix
-make matrix-update
-
-# Verify matrix data integrity
-make matrix-verify
+make matrix-check     # Check matrix status
+make matrix-update   # Force update from online sources
+make matrix-verify   # Verify matrix data integrity
 ```
 
 ### Official Sources
@@ -133,19 +128,17 @@ sudo ./nv-install
 ./nv-install --help
 
 Options:
+  --check                Check prerequisites only (shows hybrid info if detected)
+  --gui                  Use GUI mode (Tkinter or Zenity)
   --dry-run, --simulate  Show what would be installed without making changes
-  --check                Check prerequisites only
-  --gui                  Use GUI mode (Tkinter)
-  --zenity               Use Zenity dialogs
-  --with-cuda            Install CUDA packages (default: yes)
-  --cuda-version VER      Specify CUDA version
+  --yes, -y              Skip installation confirmation
   --driver-version VER   Specify driver version
-  --skip-confirmation    Skip installation confirmation
-  --fix                  Attempt to fix missing repositories
+  --cuda-version VER     Specify CUDA version
+  --no-cuda              Install driver without CUDA
   --revert-to-nouveau    Switch from proprietary to Nouveau (open-source)
-  --update-matrix        Force update of compatibility matrix
-  --matrix-info          Show compatibility matrix information
+  --power-profile        Set hybrid graphics profile (intel, hybrid, nvidia)
   --debug                Enable debug logging
+  --version              Show version information
 ```
 
 ## Driver Options
