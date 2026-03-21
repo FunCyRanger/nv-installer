@@ -8,11 +8,10 @@ from nvidia_inst.cli import (
     DriverState,
     detect_driver_state,
     execute_driver_change,
-    install_driver_cli,
 )
 from nvidia_inst.distro.detector import DistroDetectionError, DistroInfo, detect_distro
 from nvidia_inst.gpu.compatibility import DriverRange, get_driver_range
-from nvidia_inst.gpu.detector import GPUInfo, detect_gpu, has_nvidia_gpu
+from nvidia_inst.gpu.detector import GPUDetectionError, GPUInfo, detect_gpu
 from nvidia_inst.utils.logger import get_logger
 from nvidia_inst.utils.permissions import require_root
 
@@ -195,7 +194,7 @@ class NvidiaInstGUI:
             )
 
         # Detect driver state if we have GPU and distro
-        if self.gpu and self.distro:
+        if self.gpu and self.distro and self.driver_range:
             try:
                 self.state = detect_driver_state(
                     self.gpu, self.driver_range, self.distro.id
@@ -239,11 +238,6 @@ class NvidiaInstGUI:
         self.log_text.config(state=tk.DISABLED)
         self.log_text.see(tk.END)
 
-    def log(self, message: str) -> None:
-        """Log a message (for backward compatibility)."""
-        self._log_to_gui(message)
-        logger.info(message)
-
     def _show_options_window(self) -> DriverOption | None:
         """Show a window to select driver action.
 
@@ -254,12 +248,15 @@ class NvidiaInstGUI:
             messagebox.showerror("Error", "Driver state not available")
             return None
 
+        # Capture value for type narrowing
+        state = self.state
+
         dialog = tk.Toplevel(self.root)
         dialog.title("Select Driver Action")
         dialog.transient(self.root)
         dialog.grab_set()
 
-        ttk.Label(dialog, text=self.state.message).pack(padx=10, pady=10)
+        ttk.Label(dialog, text=state.message).pack(padx=10, pady=10)
 
         # Frame for radio buttons
         frame = ttk.Frame(dialog)
@@ -267,7 +264,7 @@ class NvidiaInstGUI:
 
         var = tk.IntVar(value=-1)  # No selection by default
 
-        for opt in self.state.options:
+        for opt in state.options:
             text = f"[{opt.number}] {opt.description}"
             if opt.recommended:
                 text += " [RECOMMENDED]"
@@ -279,24 +276,24 @@ class NvidiaInstGUI:
         button_frame = ttk.Frame(dialog)
         button_frame.pack(padx=10, pady=10, fill="x")
 
-        result = {
-            "option": None
-        }  # Use a dict to allow modification in nested functions
+        selected_option: DriverOption | None = None
 
         def on_ok():
+            nonlocal selected_option
             selected_num = var.get()
             if selected_num == -1:
                 messagebox.showwarning("Warning", "Please select an option")
                 return
             # Find the option with the selected number
-            for opt in self.state.options:
+            for opt in state.options:
                 if opt.number == selected_num:
-                    result["option"] = opt
+                    selected_option = opt
                     break
             dialog.destroy()
 
         def on_cancel():
-            result["option"] = None
+            nonlocal selected_option
+            selected_option = None
             dialog.destroy()
 
         ttk.Button(button_frame, text="OK", command=on_ok).pack(side="right", padx=5)
@@ -305,7 +302,7 @@ class NvidiaInstGUI:
         # Wait for the window to be destroyed
         self.root.wait_window(dialog)
 
-        return result["option"]
+        return selected_option
 
     def _on_select_action(self) -> None:
         """Handle action button click."""
@@ -321,6 +318,10 @@ class NvidiaInstGUI:
             messagebox.showerror("Error", "Could not determine driver state")
             return
 
+        if not self.distro:
+            messagebox.showerror("Error", "Could not determine distribution")
+            return
+
         if not require_root(interactive=True):
             messagebox.showerror(
                 "Error", "Root privileges required for driver operations"
@@ -332,15 +333,21 @@ class NvidiaInstGUI:
             return  # User cancelled
 
         self.action_btn.config(state=tk.DISABLED)
-        self.log(f"Selected option: {selected_option.description}")
+        self._log_to_gui(f"Selected option: {selected_option.description}")
 
         try:
+            # Use local variables for type narrowing
+            distro = self.distro
+            gpu = self.gpu
+            driver_range = self.driver_range
+            state = self.state
+
             result = execute_driver_change(
                 selected_option,
-                self.state,
-                self.distro,
-                self.gpu,
-                self.driver_range,
+                state,
+                distro,
+                gpu,
+                driver_range,
                 dry_run=False,
             )
             if result == 0:
@@ -348,13 +355,13 @@ class NvidiaInstGUI:
                     "Success",
                     "Operation completed successfully!\nPlease reboot your system if required.",
                 )
-                self.log("Operation completed successfully")
+                self._log_to_gui("Operation completed successfully")
             else:
                 messagebox.showerror("Error", "Operation failed")
-                self.log("Operation failed")
+                self._log_to_gui("Operation failed")
         except Exception as e:
             messagebox.showerror("Error", str(e))
-            self.log(f"Error: {e}")
+            self._log_to_gui(f"Error: {e}")
         finally:
             self.action_btn.config(state=tk.NORMAL)
 

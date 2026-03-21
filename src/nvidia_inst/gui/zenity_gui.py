@@ -8,7 +8,6 @@ from nvidia_inst.cli import (
     detect_driver_state,
     execute_driver_change,
     get_driver_range,
-    install_driver_cli,
 )
 from nvidia_inst.distro.detector import DistroDetectionError, detect_distro
 from nvidia_inst.gpu.detector import detect_gpu, has_nvidia_gpu
@@ -106,6 +105,66 @@ def detect_gui_type() -> bool:
     return shutil.which("zenity") is not None
 
 
+def zenity_show_options(state: DriverState) -> DriverOption | None:
+    """Show driver options using zenity dialog.
+
+    Args:
+        state: Current driver state with available options.
+
+    Returns:
+        Selected DriverOption or None if cancelled.
+    """
+    # Prepare options for zenity list
+    options_text = []
+    for opt in state.options:
+        option_line = f"{opt.number}. {opt.description}"
+        if opt.recommended:
+            option_line += " [RECOMMENDED]"
+        options_text.append(option_line)
+
+    # Join options with newline for zenity --list
+    options_data = "\n".join(options_text)
+
+    # Show zenity list dialog
+    try:
+        result = subprocess.run(
+            [
+                "zenity",
+                "--list",
+                "--title=Driver Management Options",
+                f"--text={state.message}",
+                "--column=Option",
+                "--width=500",
+                "--height=400",
+            ],
+            input=options_data,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if result.returncode != 0:
+            # User cancelled or error
+            return None
+
+        selected_description = result.stdout.strip()
+        if not selected_description:
+            return None
+
+        # Find the option matching the selected description
+        for opt in state.options:
+            desc = f"{opt.number}. {opt.description}"
+            if opt.recommended:
+                desc += " [RECOMMENDED]"
+            if desc == selected_description:
+                return opt
+
+        return None  # Should not happen
+
+    except Exception:
+        return None
+
+
 def run_gui(args) -> int:
     """Run the Zenity GUI.
 
@@ -149,7 +208,7 @@ Driver: {driver_range.min_version}"""
         info_text += f" - {driver_range.max_version}"
 
     info_text += f"""
-    CUDA: {driver_range.cuda_min}"""
+CUDA: {driver_range.cuda_min}"""
     if driver_range.cuda_max:
         info_text += f" - {driver_range.cuda_max}"
 
@@ -159,9 +218,16 @@ Driver: {driver_range.min_version}"""
     zenity_info("nvidia-inst - System Information", info_text)
 
     if driver_range.is_eol:
-        zenity_warning("EOL GPU", f"{driver_range.eol_message}\n\nContinue anyway?")
+        zenity_warning(
+            "EOL GPU",
+            f"{driver_range.eol_message}\n\nContinue anyway?",
+        )
 
     # Detect driver state and get available options
+    if not gpu or not distro or not driver_range:
+        zenity_error("Error", "Could not detect system information")
+        return 1
+
     state = detect_driver_state(gpu, driver_range, distro.id)
 
     # Show options to user
@@ -191,98 +257,3 @@ Driver: {driver_range.min_version}"""
     except Exception as e:
         zenity_error("Error", f"Operation failed: {e}")
         return 1
-
-
-def zenity_show_options(state: DriverState) -> DriverOption | None:
-    """Show driver options using zenity dialog.
-
-    Args:
-        state: Current driver state with available options.
-
-    Returns:
-        Selected DriverOption or None if cancelled.
-    """
-    # Prepare options for zenity list
-    options_text = []
-    for opt in state.options:
-        option_line = f"{opt.number}. {opt.description}"
-        if opt.recommended:
-            option_line += " [RECOMMENDED]"
-        options_text.append(option_line)
-
-    # Join options with newline for zenity --list
-    options_data = "\n".join(options_text)
-
-    # Show zenity list dialog
-    try:
-        result = subprocess.run(
-            [
-                "zenity",
-                "--list",
-                "--title=Driver Management Options",
-                f"--text={state.message}",
-                "--column=Option",
-                "--width=500",
-                "--height=400",
-                "--radiolist",
-                "--hide-column=2",  # Hide the number column, we'll parse it differently
-                "--print-column=2",  # Print the description column
-            ],
-            input=options_data,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-
-        if result.returncode != 0:
-            # User cancelled or error
-            return None
-
-        selected_description = result.stdout.strip()
-        if not selected_description:
-            return None
-
-        # Find the option matching the selected description
-        for opt in state.options:
-            desc = opt.description
-            if opt.recommended:
-                desc += " [RECOMMENDED]"
-            if desc == selected_description:
-                return opt
-
-        return None  # Should not happen
-
-    except Exception:
-        return None
-
-    if not require_root(interactive=True):
-        zenity_error("Error", "Root privileges required to install drivers")
-        return 1
-
-    progress = zenity_progress("Installing", "Installing driver...", 0)
-
-    try:
-        install_driver_cli(
-            driver_version=driver_range.max_version,
-            with_cuda=True,
-            skip_confirmation=True,
-        )
-
-        if progress.stdin:
-            progress.stdin.write("100\n")
-            progress.stdin.close()
-        progress.wait()
-
-        zenity_info(
-            "Success",
-            "Driver installed successfully!\nPlease reboot your system.",
-        )
-
-    except Exception as e:
-        if progress.stdin:
-            progress.stdin.close()
-        progress.wait()
-        zenity_error("Error", f"Installation failed: {e}")
-        return 1
-
-    return 0
