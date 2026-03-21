@@ -209,4 +209,5 @@ class TestDetectDriverState:
             state = detect_driver_state(mock_gpu, mock_driver_range, "ubuntu")
 
             assert state.status.value == "nothing"
-            assert len(state.options) == 2
+            assert len(state.options) == 3
+            assert state.options[-1].action == "cancel"

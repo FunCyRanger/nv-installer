@@ -627,6 +627,8 @@ def _build_nothing_options(
         )
     )
 
+    options.append(DriverOption(len(options) + 1, "Cancel", "cancel"))
+
     return options
 
 
@@ -664,6 +666,9 @@ def show_driver_options(state: DriverState) -> int:
             print("Invalid option. Please enter a number from the list.")
         except ValueError:
             print("Invalid input. Please enter a number.")
+        except KeyboardInterrupt:
+            print("\n\nCancelled.")
+            return -1
 
 
 def check_prerequisites(
@@ -1428,6 +1433,10 @@ def install_driver_cli(
 
     state = detect_driver_state(gpu, driver_range, distro.id)
     selected = show_driver_options(state)
+
+    if selected == -1:
+        return 0
+
     option = next(opt for opt in state.options if opt.number == selected)
 
     return execute_driver_change(
