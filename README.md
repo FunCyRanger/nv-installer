@@ -370,7 +370,11 @@ If you test on other distributions or GPUs, please report your results:
 
 ## License
 
-MIT License
+GNU Affero General Public License v3.0 (AGPL-3.0)
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+
+See [LICENSE](LICENSE) file for full license text.
 
 ## Credits
 
