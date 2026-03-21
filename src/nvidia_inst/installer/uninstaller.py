@@ -71,7 +71,15 @@ def revert_to_nouveau(distro_id: str) -> RevertResult:
         result.message = f"Unsupported distribution: {distro_id}"
         return result
 
-    packages = _get_packages_to_remove(distro_id)
+    _cleanup_dkms(distro_id)
+
+    installed_packages = _query_installed_nvidia_packages(distro_id)
+    if installed_packages:
+        logger.info(f"Found installed Nvidia packages: {installed_packages}")
+        packages = installed_packages
+    else:
+        packages = _get_packages_to_remove(distro_id)
+
     if not packages:
         result.errors.append("No Nvidia packages found to remove")
         result.message = "No Nvidia packages found"
@@ -104,30 +112,138 @@ def revert_to_nouveau(distro_id: str) -> RevertResult:
 
     return result
 
-    packages = _get_packages_to_remove(distro_id)
-    if not packages:
-        result.errors.append("No Nvidia packages found to remove")
-        result.message = "No Nvidia packages found"
-        return result
 
-    removed = _remove_packages(distro_id, packages)
-    result.packages_removed = removed
+def _query_installed_nvidia_packages(distro_id: str) -> list[str]:
+    """Query actually installed NVIDIA packages on the system.
 
-    if not removed:
-        result.errors.append("Failed to remove packages")
-        result.message = "Failed to remove Nvidia packages"
-        return result
+    Args:
+        distro_id: Distribution ID.
 
-    _remove_blacklist()
+    Returns:
+        List of installed NVIDIA package names.
+    """
+    installed = []
+    patterns = ["nvidia", "xorg-x11-drv-nvidia", "akmod", "x11-video-nvidia"]
 
-    initramfs_result = _rebuild_initramfs(distro_id)
-    if not initramfs_result:
-        result.errors.append("Failed to rebuild initramfs")
+    try:
+        if distro_id in ("ubuntu", "debian", "linuxmint", "pop"):
+            result = subprocess.run(
+                ["dpkg", "-l"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                for line in result.stdout.splitlines():
+                    line_lower = line.lower()
+                    if any(p in line_lower for p in patterns):
+                        parts = line.split()
+                        if len(parts) >= 2 and parts[0] == "ii":
+                            pkg_full = parts[1]
+                            idx = 0
+                            for i, c in enumerate(pkg_full):
+                                if c.isdigit():
+                                    idx = i
+                                    break
+                            pkg_name = pkg_full[:idx].rstrip("-")
+                            if pkg_name and pkg_name not in installed:
+                                installed.append(pkg_name)
 
-    result.success = len(result.errors) == 0
-    result.message = _build_message(result, distro_id)
+        elif distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
+            result = subprocess.run(
+                ["rpm", "-qa", "--queryformat", "%{NAME}\n"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                for line in result.stdout.splitlines():
+                    line_lower = line.lower()
+                    if any(p in line_lower for p in patterns) and line not in installed:
+                        installed.append(line.strip())
 
-    return result
+        elif distro_id in ("arch", "manjaro"):
+            result = subprocess.run(
+                ["pacman", "-Qq"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                for line in result.stdout.splitlines():
+                    line_lower = line.lower()
+                    if (
+                        any(p in line_lower for p in ["nvidia", "akmod"])
+                        and line not in installed
+                    ):
+                        installed.append(line)
+
+        elif distro_id in ("opensuse", "sles"):
+            result = subprocess.run(
+                ["rpm", "-qa", "--queryformat", "%{NAME}\n"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                for line in result.stdout.splitlines():
+                    line_lower = line.lower()
+                    if (
+                        any(p in line_lower for p in ["nvidia", "x11-video"])
+                        and line not in installed
+                    ):
+                        installed.append(line.strip())
+
+    except Exception as e:
+        logger.warning(f"Failed to query installed packages: {e}")
+
+    return installed
+
+
+def _cleanup_dkms(distro_id: str) -> None:
+    """Clean up DKMS modules before package removal.
+
+    Args:
+        distro_id: Distribution ID.
+    """
+    try:
+        if distro_id in ("ubuntu", "debian", "linuxmint", "pop"):
+            subprocess.run(
+                ["dkms", "status", "-m", "nvidia"],
+                capture_output=True,
+                timeout=30,
+            )
+            modules = subprocess.run(
+                ["ls", "/var/lib/dkms/"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if modules.returncode == 0:
+                for line in modules.stdout.splitlines():
+                    if "nvidia" in line.lower():
+                        parts = line.split("/")
+                        if len(parts) >= 1:
+                            module = parts[0]
+                            logger.info(f"Removing DKMS module: {module}")
+                            subprocess.run(
+                                ["dkms", "remove", module, "--all"],
+                                capture_output=True,
+                                timeout=60,
+                            )
+        elif distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
+            result = subprocess.run(
+                ["akmods", "--remove", "nvidia"],
+                capture_output=True,
+                timeout=60,
+            )
+            if result.returncode != 0:
+                logger.warning(
+                    f"akmods remove failed: {result.stderr.decode() if isinstance(result.stderr, bytes) else result.stderr}"
+                )
+
+    except Exception as e:
+        logger.warning(f"DKMS cleanup warning: {e}")
 
 
 def _get_packages_to_remove(distro_id: str) -> list[str]:
