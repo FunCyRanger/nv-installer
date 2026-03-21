@@ -51,7 +51,9 @@ class PacmanManager(PackageManager):
             return True
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to install packages: {e.stderr}")
-            raise PackageManagerError(f"Failed to install: {', '.join(packages)}") from e
+            raise PackageManagerError(
+                f"Failed to install: {', '.join(packages)}"
+            ) from e
 
     def remove(self, packages: list[str]) -> bool:
         """Remove packages using pacman."""
@@ -87,6 +89,7 @@ class PacmanManager(PackageManager):
     def is_available(self) -> bool:
         """Check if pacman is available."""
         import shutil
+
         return shutil.which(self._pacman_path) is not None
 
     def get_installed_version(self, package: str) -> str | None:
@@ -121,10 +124,19 @@ class PacmanManager(PackageManager):
         except subprocess.CalledProcessError:
             return None
 
-    def pin_version(self, package: str, version: str) -> bool:
-        """Pin package to specific version using pacman."""
-        logger.warning("Pacman does not support version pinning natively")
-        logger.info(f"Consider using pacman.conf IgnorePkg: {package}")
+    def pin_version(self, package: str, version: str = "*") -> bool:
+        """Pin package to version using pacman.
+
+        Args:
+            package: Package name to lock.
+            version: Version pattern (for reference, not used).
+
+        Returns:
+            False - pacman uses LockPkg instead.
+        """
+        logger.warning("Use pacman LockPkg to prevent upgrades:")
+        logger.info(f"  sudo pacman -D --lock {package}")
+        logger.info(f"  sudo pacman -D --unlock {package}  # to unlock")
         return False
 
     def get_all_versions(self, package: str) -> list[str]:

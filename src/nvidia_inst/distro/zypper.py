@@ -51,7 +51,9 @@ class ZypperManager(PackageManager):
             return True
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to install packages: {e.stderr}")
-            raise PackageManagerError(f"Failed to install: {', '.join(packages)}") from e
+            raise PackageManagerError(
+                f"Failed to install: {', '.join(packages)}"
+            ) from e
 
     def remove(self, packages: list[str]) -> bool:
         """Remove packages using zypper."""
@@ -89,6 +91,7 @@ class ZypperManager(PackageManager):
     def is_available(self) -> bool:
         """Check if zypper is available."""
         import shutil
+
         return shutil.which(self._zypper_path) is not None
 
     def get_installed_version(self, package: str) -> str | None:
@@ -123,25 +126,42 @@ class ZypperManager(PackageManager):
         except subprocess.CalledProcessError:
             return None
 
-    def pin_version(self, package: str, version: str) -> bool:
-        """Pin package to specific version using zypper."""
+    def pin_version(self, package: str, version: str = "*") -> bool:
+        """Pin package to version using zypper.
+
+        Args:
+            package: Package name to lock.
+            version: Version pattern. Defaults to '*' for package lock.
+                     Use 'package=version' for specific version lock.
+
+        Returns:
+            True if successful, False otherwise.
+        """
         try:
+            lock_name = package if version == "*" else f"{package}={version}"
             subprocess.run(
-                [self._zypper_path, "addlock", f"{package}={version}"],
+                [self._zypper_path, "addlock", lock_name],
                 check=True,
                 capture_output=True,
             )
-            logger.info(f"Pinned {package} to version {version}")
+            logger.info(f"Locked {lock_name}")
             return True
         except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to pin version: {e.stderr}")
+            logger.error(f"Failed to lock package: {e.stderr}")
             return False
 
     def get_all_versions(self, package: str) -> list[str]:
         """Get all available versions of a package using zypper."""
         try:
             result = subprocess.run(
-                [self._zypper_path, "packages", "-s", "version", "--match-substring", package],
+                [
+                    self._zypper_path,
+                    "packages",
+                    "-s",
+                    "version",
+                    "--match-substring",
+                    package,
+                ],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -165,5 +185,6 @@ class ZypperManager(PackageManager):
     def _version_sort_key(self, version: str) -> tuple:
         """Sort key for version strings."""
         import re
+
         nums = re.findall(r"\d+", version)
         return tuple(int(n) for n in nums[:3]) if nums else (0, 0, 0)

@@ -107,8 +107,8 @@ class TestDnfManager:
         mock_subprocess_run.return_value = MagicMock(
             returncode=0,
             stdout="akmod-nvidia.x86_64 : Libraries for nvidia driver\n"
-                   "nvidia-driver.x86_64 : NVIDIA driver metapackage",
-            stderr=""
+            "nvidia-driver.x86_64 : NVIDIA driver metapackage",
+            stderr="",
         )
         packages = dnf_manager.search("nvidia")
         assert len(packages) >= 1
@@ -129,7 +129,9 @@ class TestDnfManager:
         packages = dnf_manager.search("nvidia")
         assert packages == []
 
-    def test_get_installed_version(self, dnf_manager, mock_subprocess_run, dnf_info_output):
+    def test_get_installed_version(
+        self, dnf_manager, mock_subprocess_run, dnf_info_output
+    ):
         """Test getting installed package version."""
         mock_subprocess_run.return_value = MagicMock(
             returncode=0, stdout=dnf_info_output, stderr=""
@@ -137,7 +139,9 @@ class TestDnfManager:
         version = dnf_manager.get_installed_version("akmod-nvidia")
         assert version == "535.154.05"
 
-    def test_get_installed_version_not_installed(self, dnf_manager, mock_subprocess_run):
+    def test_get_installed_version_not_installed(
+        self, dnf_manager, mock_subprocess_run
+    ):
         """Test getting version of uninstalled package."""
         mock_subprocess_run.side_effect = subprocess.CalledProcessError(
             1, "dnf info", stderr="No matching"
@@ -145,7 +149,9 @@ class TestDnfManager:
         version = dnf_manager.get_installed_version("nonexistent")
         assert version is None
 
-    def test_get_available_version(self, dnf_manager, mock_subprocess_run, dnf_info_output):
+    def test_get_available_version(
+        self, dnf_manager, mock_subprocess_run, dnf_info_output
+    ):
         """Test getting available package version."""
         mock_subprocess_run.return_value = MagicMock(
             returncode=0, stdout=dnf_info_output, stderr=""
@@ -164,11 +170,31 @@ class TestDnfManager:
     def test_pin_version_success(self, dnf_manager, mock_subprocess_run):
         """Test successful version pinning via versionlock."""
         mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        result = dnf_manager.pin_version("akmod-nvidia", "535.154.05")
+        result = dnf_manager.pin_version("akmod-nvidia", "580.*")
         assert result is True
         call_args = mock_subprocess_run.call_args[0][0]
         assert "versionlock" in call_args
         assert "add" in call_args
+        assert "--raw" in call_args
+        assert "akmod-nvidia-580.*" in call_args
+
+    def test_pin_version_with_exact_version(self, dnf_manager, mock_subprocess_run):
+        """Test version pinning with exact version."""
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        result = dnf_manager.pin_version("akmod-nvidia", "535.154.05")
+        assert result is True
+        call_args = mock_subprocess_run.call_args[0][0]
+        assert "--raw" in call_args
+        assert "akmod-nvidia-535.154.05" in call_args
+
+    def test_pin_version_default_star(self, dnf_manager, mock_subprocess_run):
+        """Test version pinning with default * pattern."""
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        result = dnf_manager.pin_version("akmod-nvidia")
+        assert result is True
+        call_args = mock_subprocess_run.call_args[0][0]
+        assert "--raw" in call_args
+        assert "akmod-nvidia-*" in call_args
 
     def test_pin_version_failure(self, dnf_manager, mock_subprocess_run):
         """Test version pinning failure."""
@@ -178,9 +204,7 @@ class TestDnfManager:
         result = dnf_manager.pin_version("akmod-nvidia", "535.154.05")
         assert result is False
 
-    def test_get_all_versions(
-        self, dnf_manager, mock_subprocess_run, dnf_list_output
-    ):
+    def test_get_all_versions(self, dnf_manager, mock_subprocess_run, dnf_list_output):
         """Test getting all available versions."""
         mock_subprocess_run.return_value = MagicMock(
             returncode=0, stdout=dnf_list_output, stderr=""
@@ -196,14 +220,16 @@ class TestDnfManager:
         mock_subprocess_run.return_value = MagicMock(
             returncode=0,
             stdout="akmod-nvidia.x86_64        3:535.154.05-1.fc38        @rpmfusion\n"
-                   "akmod-nvidia.x86_64        2:535.54.06-1.fc38        rpmfusion",
-            stderr=""
+            "akmod-nvidia.x86_64        2:535.54.06-1.fc38        rpmfusion",
+            stderr="",
         )
         versions = dnf_manager.get_all_versions("akmod-nvidia")
         assert "535.154.05" in versions
         assert "535.54.06" in versions
 
-    def test_get_all_versions_fallback(self, dnf_manager, mock_subprocess_run, dnf_info_output):
+    def test_get_all_versions_fallback(
+        self, dnf_manager, mock_subprocess_run, dnf_info_output
+    ):
         """Test getting versions with fallback to dnf info."""
         mock_subprocess_run.side_effect = [
             subprocess.CalledProcessError(1, "dnf list", stderr="Error"),
@@ -223,14 +249,18 @@ class TestDnfManager:
     def test_version_sort_key(self, dnf_manager):
         """Test version sorting."""
         versions = ["535.154.05", "535.54.06", "535.43.02"]
-        sorted_versions = sorted(versions, key=dnf_manager._version_sort_key, reverse=True)
+        sorted_versions = sorted(
+            versions, key=dnf_manager._version_sort_key, reverse=True
+        )
         assert sorted_versions == ["535.154.05", "535.54.06", "535.43.02"]
 
 
 class TestDnfManagerIntegration:
     """Integration-style tests for DNF manager."""
 
-    def test_full_install_workflow(self, mock_subprocess_run, mock_subprocess_popen, mock_shutil_which):
+    def test_full_install_workflow(
+        self, mock_subprocess_run, mock_subprocess_popen, mock_shutil_which
+    ):
         """Test full install workflow."""
         mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         mock_proc = MagicMock()
@@ -247,12 +277,12 @@ class TestDnfManagerIntegration:
         assert dnf.update() is True
         assert dnf.install(["akmod-nvidia", "xorg-x11-drv-nvidia"]) is True
 
-    def test_search_and_install_workflow(self, mock_subprocess_run, mock_subprocess_popen):
+    def test_search_and_install_workflow(
+        self, mock_subprocess_run, mock_subprocess_popen
+    ):
         """Test search then install workflow."""
         mock_subprocess_run.return_value = MagicMock(
-            returncode=0,
-            stdout="akmod-nvidia.x86_64 : Libraries",
-            stderr=""
+            returncode=0, stdout="akmod-nvidia.x86_64 : Libraries", stderr=""
         )
         mock_proc = MagicMock()
         mock_proc.poll.return_value = 0

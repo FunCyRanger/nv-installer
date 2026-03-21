@@ -106,9 +106,7 @@ class TestPacmanManager:
 
     def test_search_not_found(self, pacman_manager, mock_subprocess_run):
         """Test package search with no results."""
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=0, stdout="", stderr=""
-        )
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         packages = pacman_manager.search("nonexistent")
         assert packages == []
 
@@ -128,7 +126,9 @@ class TestPacmanManager:
         version = pacman_manager.get_installed_version("nvidia")
         assert version == "535.154.05-14"
 
-    def test_get_installed_version_not_installed(self, pacman_manager, mock_subprocess_run):
+    def test_get_installed_version_not_installed(
+        self, pacman_manager, mock_subprocess_run
+    ):
         """Test getting version of uninstalled package."""
         mock_subprocess_run.side_effect = subprocess.CalledProcessError(
             1, "pacman -Q", stderr="package not installed"
@@ -136,7 +136,9 @@ class TestPacmanManager:
         version = pacman_manager.get_installed_version("nonexistent")
         assert version is None
 
-    def test_get_available_version(self, pacman_manager, mock_subprocess_run, pacman_si_output):
+    def test_get_available_version(
+        self, pacman_manager, mock_subprocess_run, pacman_si_output
+    ):
         """Test getting available package version."""
         mock_subprocess_run.return_value = MagicMock(
             returncode=0, stdout=pacman_si_output, stderr=""
@@ -155,6 +157,11 @@ class TestPacmanManager:
     def test_pin_version_not_supported(self, pacman_manager):
         """Test version pinning returns False (not supported)."""
         result = pacman_manager.pin_version("nvidia", "535.154.05")
+        assert result is False
+
+    def test_pin_version_default_star(self, pacman_manager):
+        """Test version pinning with default * parameter."""
+        result = pacman_manager.pin_version("nvidia")
         assert result is False
 
     def test_package_exists_true(self, pacman_manager, mock_subprocess_run):
@@ -202,8 +209,12 @@ class TestPacmanManagerBranches:
 
         def mock_side_effect(*args, **kwargs):
             nonlocal call_count
-            cmd = args[0] if args else kwargs.get('args', [])
-            if "-Si" in cmd and "nvidia" in cmd and ("nvidia-utils" in str(cmd) or call_count == 0):
+            cmd = args[0] if args else kwargs.get("args", [])
+            if (
+                "-Si" in cmd
+                and "nvidia" in cmd
+                and ("nvidia-utils" in str(cmd) or call_count == 0)
+            ):
                 call_count += 1
                 return MagicMock(returncode=0, stdout="", stderr="")
             return MagicMock(returncode=1, stdout="", stderr="")
@@ -219,7 +230,7 @@ class TestPacmanManagerBranches:
 
         def mock_side_effect(*args, **kwargs):
             nonlocal call_count
-            cmd = args[0] if args else kwargs.get('args', [])
+            cmd = args[0] if args else kwargs.get("args", [])
             if "-Si" in cmd and "470xx" in str(cmd):
                 call_count += 1
                 if call_count == 1:

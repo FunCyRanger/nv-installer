@@ -1043,7 +1043,6 @@ def _run_dry_run(
 
     print("\n--- Commands to Execute ---")
 
-    # Step 1: Update package lists first
     print("# Step 1: Update package lists:")
     if distro.id in ("ubuntu", "debian"):
         print("  sudo apt update")
@@ -1054,21 +1053,25 @@ def _run_dry_run(
     elif distro.id in ("opensuse"):
         print("  sudo zypper refresh")
 
-    # Step 2: Block wrong branch if GPU is limited (before install)
     if driver_range.max_branch and driver_range.is_limited:
-        wrong_branch = _get_wrong_branch(driver_range.max_branch)
-        if wrong_branch:
-            print("\n# Step 2: BLOCK wrong driver branch (IMPORTANT!):")
-            if distro.id in ("fedora", "rhel", "centos"):
-                print(
-                    f"  # Block {wrong_branch}.xx drivers - these are incompatible with your GPU!"
-                )
-                print(f"  sudo dnf versionlock add '*{wrong_branch}.*' || true")
-            elif distro.id in ("ubuntu", "debian"):
-                print(f"  # Block {wrong_branch}.xx drivers in /etc/apt/preferences.d/")
-                print("  # This prevents installing incompatible drivers!")
+        print(
+            "\n# Step 2: Lock driver to correct branch (prevents incompatible drivers):"
+        )
+        if distro.id in ("fedora", "rhel", "centos"):
+            print(
+                f"  sudo dnf versionlock add --raw 'akmod-nvidia-{driver_range.max_branch}.*'"
+            )
+        elif distro.id in ("ubuntu", "debian"):
+            print("  # Add to /etc/apt/preferences.d/nvidia:")
+            print(
+                f"  echo 'Package: nvidia-driver-*\nPin: version {driver_range.max_branch}.*\nPin-Priority: 1001' | sudo tee /etc/apt/preferences.d/nvidia"
+            )
+        elif distro.id in ("arch", "manjaro"):
+            print("  # Lock current branch package:")
+            print(f"  sudo pacman -D --lock nvidia-{driver_range.max_branch}xx")
+        elif distro.id in ("opensuse"):
+            print("  sudo zypper addlock x11-video-nvidiaG05")
 
-    # Step 3: Install driver packages (now done before reboot)
     print("\n# Step 3: Install driver packages:")
     if distro.id in ("ubuntu", "debian"):
         cmd = f"  sudo apt install -y {' '.join(packages)}"
@@ -1083,30 +1086,14 @@ def _run_dry_run(
         cmd = f"  sudo zypper install -y {' '.join(packages)}"
         print(cmd)
 
-    # Step 4: Lock driver to branch
-    if driver_range.max_branch and driver_range.is_limited:
-        if driver_range.is_eol:
-            print("\n# Step 4: Lock driver to exact version (EOL GPU):")
-            if distro.id in ("ubuntu", "debian"):
-                print(f"  # Pin nvidia-driver to {driver_range.max_version}")
-            elif distro.id in ("fedora", "rhel", "centos"):
-                print(
-                    f"  sudo dnf versionlock add 'akmod-nvidia-{driver_range.max_branch}.*'"
-                )
-        else:
-            print(
-                f"\n# Step 4: Lock driver to branch {driver_range.max_branch}.xx (optional):"
-            )
-            if distro.id in ("ubuntu", "debian"):
-                print(
-                    f"  # Pin to branch {driver_range.max_branch}.* in /etc/apt/preferences.d/"
-                )
-            elif distro.id in ("fedora", "rhel", "centos"):
-                print(
-                    f"  sudo dnf versionlock add 'akmod-nvidia-{driver_range.max_branch}.*'"
-                )
+    print("\n# Step 4: Rebuild initramfs:")
+    if distro.id in ("fedora", "rhel", "centos", "opensuse", "sles"):
+        print("  sudo dracut -f --regenerate-all")
+    elif distro.id in ("arch", "manjaro"):
+        print("  sudo mkinitcpio -P")
+    else:
+        print("  sudo update-initramfs -u")
 
-    # Step 5: Reboot (now after driver is installed)
     print("\n# Step 5: Reboot:")
     print("  sudo reboot")
 

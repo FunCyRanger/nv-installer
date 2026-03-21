@@ -52,7 +52,9 @@ class AptManager(PackageManager):
             return True
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to install packages: {e.stderr}")
-            raise PackageManagerError(f"Failed to install: {', '.join(packages)}") from e
+            raise PackageManagerError(
+                f"Failed to install: {', '.join(packages)}"
+            ) from e
 
     def remove(self, packages: list[str]) -> bool:
         """Remove packages using apt."""
@@ -87,6 +89,7 @@ class AptManager(PackageManager):
     def is_available(self) -> bool:
         """Check if apt is available."""
         import shutil
+
         return shutil.which(self._apt_path) is not None
 
     def get_installed_version(self, package: str) -> str | None:
@@ -121,8 +124,17 @@ class AptManager(PackageManager):
         except subprocess.CalledProcessError:
             return None
 
-    def pin_version(self, package: str, version: str) -> bool:
-        """Pin package to specific version using apt preferences."""
+    def pin_version(self, package: str, version: str = "*") -> bool:
+        """Pin package to version using apt preferences.
+
+        Args:
+            package: Package name (e.g., 'nvidia-driver-*').
+            version: Version pattern. Use '580.*' to lock to 580 branch,
+                     'exact.version' for exact version.
+
+        Returns:
+            True if successful, False otherwise.
+        """
         pin_file = f"/etc/apt/preferences.d/{package}"
         try:
             content = f"""Package: {package}
@@ -131,7 +143,7 @@ Pin-Priority: 1001
 """
             with open(pin_file, "w") as f:
                 f.write(content)
-            logger.info(f"Pinned {package} to version {version}")
+            logger.info(f"Pinned {package} to pattern {version}")
             return True
         except PermissionError:
             logger.error(f"Permission denied to create {pin_file}")
@@ -168,5 +180,6 @@ Pin-Priority: 1001
     def _version_sort_key(self, version: str) -> tuple:
         """Sort key for version strings."""
         import re
+
         nums = re.findall(r"\d+", version)
         return tuple(int(n) for n in nums[:3]) if nums else (0, 0, 0)

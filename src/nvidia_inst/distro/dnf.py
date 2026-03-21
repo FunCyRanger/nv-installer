@@ -73,7 +73,9 @@ class DnfManager(PackageManager):
 
             if proc.returncode != 0:
                 logger.error(f"Failed to install packages: {result}")
-                raise PackageManagerError(f"Failed to install: {', '.join(packages)}\n{result}")
+                raise PackageManagerError(
+                    f"Failed to install: {', '.join(packages)}\n{result}"
+                )
 
             logger.info(f"Installed packages: {', '.join(packages)}")
             return True
@@ -82,7 +84,9 @@ class DnfManager(PackageManager):
             raise
         except Exception as e:
             logger.error(f"Failed to install packages: {e}")
-            raise PackageManagerError(f"Failed to install: {', '.join(packages)}") from e
+            raise PackageManagerError(
+                f"Failed to install: {', '.join(packages)}"
+            ) from e
 
     def remove(self, packages: list[str]) -> bool:
         """Remove packages using dnf."""
@@ -118,6 +122,7 @@ class DnfManager(PackageManager):
     def is_available(self) -> bool:
         """Check if dnf is available."""
         import shutil
+
         return shutil.which(self._dnf_path) is not None
 
     def get_installed_version(self, package: str) -> str | None:
@@ -152,22 +157,35 @@ class DnfManager(PackageManager):
         except subprocess.CalledProcessError:
             return None
 
-    def pin_version(self, package: str, version: str) -> bool:
-        """Pin package to specific version using dnf versionlock."""
+    def pin_version(self, package: str, version: str = "*") -> bool:
+        """Pin package to version using dnf versionlock.
+
+        Args:
+            package: Package name (e.g., 'akmod-nvidia').
+            version: Version pattern. Defaults to '*' for branch locking.
+                     Use '580.*' to lock to 580 branch, 'exact.version' for exact.
+
+        Returns:
+            True if successful, False otherwise.
+        """
         try:
-            subprocess.run(
-                [self._dnf_path, "versionlock", "add", f"{package}-{version}"],
-                check=True,
-                capture_output=True,
-            )
-            logger.info(f"Pinned {package} to version {version}")
+            cmd = [
+                self._dnf_path,
+                "versionlock",
+                "add",
+                "--raw",
+                f"{package}-{version}",
+            ]
+            subprocess.run(cmd, check=True, capture_output=True)
+            logger.info(f"Locked {package} to pattern {version}")
             return True
         except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to pin version: {e.stderr}")
+            logger.error(f"Failed to lock version: {e.stderr}")
             return False
 
     def get_all_versions(self, package: str) -> list[str]:
         """Get all available versions of a package using dnf."""
+
         def clean_version(ver: str) -> str:
             if ":" in ver:
                 ver = ver.split(":", 1)[1]
@@ -183,7 +201,11 @@ class DnfManager(PackageManager):
             versions = []
             seen = set()
             for line in result.stdout.splitlines():
-                if line.strip() and package in line and not line.startswith("Installed"):
+                if (
+                    line.strip()
+                    and package in line
+                    and not line.startswith("Installed")
+                ):
                     parts = line.split()
                     if len(parts) >= 2:
                         version = clean_version(parts[1])
@@ -214,5 +236,6 @@ class DnfManager(PackageManager):
     def _version_sort_key(self, version: str) -> tuple:
         """Sort key for version strings."""
         import re
+
         nums = re.findall(r"\d+", version)
         return tuple(int(n) for n in nums[:3]) if nums else (0, 0, 0)

@@ -99,8 +99,8 @@ class TestZypperManager:
         mock_subprocess_run.return_value = MagicMock(
             returncode=0,
             stdout="S | Name                | Type   | Version       | Repository\n"
-                   "i | x11-video-nvidiaG05 | package | 535.154.05-1 | rpmfusion",
-            stderr=""
+            "i | x11-video-nvidiaG05 | package | 535.154.05-1 | rpmfusion",
+            stderr="",
         )
         packages = zypper_manager.search("nvidia")
         assert len(packages) >= 1
@@ -121,7 +121,9 @@ class TestZypperManager:
         packages = zypper_manager.search("nvidia")
         assert packages == []
 
-    def test_get_installed_version(self, zypper_manager, mock_subprocess_run, zypper_info_output):
+    def test_get_installed_version(
+        self, zypper_manager, mock_subprocess_run, zypper_info_output
+    ):
         """Test getting installed package version."""
         mock_subprocess_run.return_value = MagicMock(
             returncode=0, stdout=zypper_info_output, stderr=""
@@ -129,7 +131,9 @@ class TestZypperManager:
         version = zypper_manager.get_installed_version("x11-video-nvidiaG05")
         assert version == "535.154.05"
 
-    def test_get_installed_version_not_installed(self, zypper_manager, mock_subprocess_run):
+    def test_get_installed_version_not_installed(
+        self, zypper_manager, mock_subprocess_run
+    ):
         """Test getting version of uninstalled package."""
         mock_subprocess_run.side_effect = subprocess.CalledProcessError(
             1, "zypper info", stderr="not installed"
@@ -137,7 +141,9 @@ class TestZypperManager:
         version = zypper_manager.get_installed_version("nonexistent")
         assert version is None
 
-    def test_get_available_version(self, zypper_manager, mock_subprocess_run, zypper_info_output):
+    def test_get_available_version(
+        self, zypper_manager, mock_subprocess_run, zypper_info_output
+    ):
         """Test getting available package version."""
         mock_subprocess_run.return_value = MagicMock(
             returncode=0, stdout=zypper_info_output, stderr=""
@@ -160,6 +166,17 @@ class TestZypperManager:
         assert result is True
         call_args = mock_subprocess_run.call_args[0][0]
         assert "addlock" in call_args
+        assert "x11-video-nvidiaG05=535.154.05" in call_args
+
+    def test_pin_version_default_star(self, zypper_manager, mock_subprocess_run):
+        """Test version pinning with default * (just package name)."""
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        result = zypper_manager.pin_version("x11-video-nvidiaG05")
+        assert result is True
+        call_args = mock_subprocess_run.call_args[0][0]
+        assert "addlock" in call_args
+        assert "x11-video-nvidiaG05" in call_args
+        assert "=" not in call_args[-1]
 
     def test_pin_version_failure(self, zypper_manager, mock_subprocess_run):
         """Test version pinning failure."""
@@ -169,7 +186,9 @@ class TestZypperManager:
         result = zypper_manager.pin_version("x11-video-nvidiaG05", "535.154.05")
         assert result is False
 
-    def test_get_all_versions(self, zypper_manager, mock_subprocess_run, zypper_packages_output):
+    def test_get_all_versions(
+        self, zypper_manager, mock_subprocess_run, zypper_packages_output
+    ):
         """Test getting all available versions."""
         mock_subprocess_run.return_value = MagicMock(
             returncode=0, stdout=zypper_packages_output, stderr=""
@@ -190,7 +209,9 @@ class TestZypperManager:
     def test_version_sort_key(self, zypper_manager):
         """Test version sorting."""
         versions = ["535.154.05", "535.54.06", "535.43.02"]
-        sorted_versions = sorted(versions, key=zypper_manager._version_sort_key, reverse=True)
+        sorted_versions = sorted(
+            versions, key=zypper_manager._version_sort_key, reverse=True
+        )
         assert sorted_versions == ["535.154.05", "535.54.06", "535.43.02"]
 
 
@@ -214,8 +235,8 @@ class TestZypperManagerIntegration:
             MagicMock(
                 returncode=0,
                 stdout="S | Name                  | Version\n"
-                       "  | x11-video-nvidiaG05 | 535.154.05",
-                stderr=""
+                "  | x11-video-nvidiaG05 | 535.154.05",
+                stderr="",
             ),
             MagicMock(returncode=0, stdout="", stderr=""),
         ]

@@ -101,9 +101,7 @@ class TestAptManager:
 
     def test_search_not_found(self, apt_manager, mock_subprocess_run):
         """Test package search with no results."""
-        mock_subprocess_run.return_value = MagicMock(
-            returncode=0, stdout="", stderr=""
-        )
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         packages = apt_manager.search("nonexistent")
         assert packages == []
 
@@ -129,7 +127,9 @@ class TestAptManager:
             text=True,
         )
 
-    def test_get_installed_version_not_installed(self, apt_manager, mock_subprocess_run):
+    def test_get_installed_version_not_installed(
+        self, apt_manager, mock_subprocess_run
+    ):
         """Test getting version of uninstalled package."""
         mock_subprocess_run.side_effect = subprocess.CalledProcessError(
             1, "dpkg-query", stderr="Package not installed"
@@ -137,7 +137,9 @@ class TestAptManager:
         version = apt_manager.get_installed_version("nonexistent")
         assert version is None
 
-    def test_get_available_version(self, apt_manager, mock_subprocess_run, apt_policy_output):
+    def test_get_available_version(
+        self, apt_manager, mock_subprocess_run, apt_policy_output
+    ):
         """Test getting available package version."""
         mock_subprocess_run.return_value = MagicMock(
             returncode=0, stdout=apt_policy_output, stderr=""
@@ -154,12 +156,25 @@ class TestAptManager:
         assert version is None
 
     def test_pin_version_success(self, apt_manager, mock_open):
-        """Test successful version pinning."""
-        result = apt_manager.pin_version("nvidia-driver-535", "535.154.05")
+        """Test successful version pinning with wildcard."""
+        result = apt_manager.pin_version("nvidia-driver-*", "580.*")
         assert result is True
         mock_open.assert_called_once()
-        call_args = mock_open.call_args
-        assert "nvidia-driver-535" in str(call_args)
+        written_content = mock_open.return_value.__enter__.return_value.write.call_args[
+            0
+        ][0]
+        assert "nvidia-driver-*" in written_content
+        assert "580.*" in written_content
+        assert "Pin-Priority: 1001" in written_content
+
+    def test_pin_version_with_exact_version(self, apt_manager, mock_open):
+        """Test version pinning with exact version."""
+        result = apt_manager.pin_version("nvidia-driver-535", "535.154.05")
+        assert result is True
+        written_content = mock_open.return_value.__enter__.return_value.write.call_args[
+            0
+        ][0]
+        assert "535.154.05" in written_content
 
     def test_pin_version_permission_denied(self, apt_manager, mock_open):
         """Test version pinning with permission denied."""
@@ -194,13 +209,17 @@ class TestAptManager:
     def test_version_sort_key(self, apt_manager):
         """Test version sorting."""
         versions = ["535.154.05", "535.54.06", "535.43.02"]
-        sorted_versions = sorted(versions, key=apt_manager._version_sort_key, reverse=True)
+        sorted_versions = sorted(
+            versions, key=apt_manager._version_sort_key, reverse=True
+        )
         assert sorted_versions == ["535.154.05", "535.54.06", "535.43.02"]
 
     def test_version_sort_key_with_prefix(self, apt_manager):
         """Test version sorting with epoch prefix."""
         versions = ["2:535.154.05", "1:535.154.05", "535.154.05"]
-        sorted_versions = sorted(versions, key=apt_manager._version_sort_key, reverse=True)
+        sorted_versions = sorted(
+            versions, key=apt_manager._version_sort_key, reverse=True
+        )
         assert "2:535.154.05" in sorted_versions
 
 
