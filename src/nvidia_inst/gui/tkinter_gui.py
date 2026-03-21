@@ -8,6 +8,7 @@ from nvidia_inst.distro.detector import DistroDetectionError, DistroInfo, detect
 from nvidia_inst.gpu.compatibility import DriverRange, get_driver_range
 from nvidia_inst.gpu.detector import GPUInfo, detect_gpu, has_nvidia_gpu
 from nvidia_inst.utils.logger import get_logger
+from nvidia_inst.utils.permissions import require_root
 
 logger = get_logger(__name__)
 
@@ -153,9 +154,13 @@ class NvidiaInstGUI:
                     cuda_text += f" - {self.driver_range.cuda_max}"
                 self.cuda_range_label.config(text=cuda_text)
 
-                status = "Limited (EOL GPU)" if self.driver_range.is_eol else "Compatible"
+                status = (
+                    "Limited (EOL GPU)" if self.driver_range.is_eol else "Compatible"
+                )
                 status_color = "orange" if self.driver_range.is_eol else "green"
-                self.status_label.config(text=f"Status: {status}", foreground=status_color)
+                self.status_label.config(
+                    text=f"Status: {status}", foreground=status_color
+                )
 
                 if self.driver_range.is_eol:
                     self.log(f"WARNING: {self.driver_range.eol_message}")
@@ -183,6 +188,10 @@ class NvidiaInstGUI:
         if not confirm:
             return
 
+        if not require_root(interactive=True):
+            messagebox.showerror("Error", "Root privileges required to install drivers")
+            return
+
         self.install_btn.config(state=tk.DISABLED)
         self.log("Starting installation...")
 
@@ -198,7 +207,9 @@ class NvidiaInstGUI:
             )
 
             if result == 0:
-                messagebox.showinfo("Success", "Driver installed successfully!\nPlease reboot.")
+                messagebox.showinfo(
+                    "Success", "Driver installed successfully!\nPlease reboot."
+                )
                 self.log("Installation completed successfully")
             else:
                 messagebox.showerror("Error", "Installation failed")

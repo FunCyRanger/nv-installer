@@ -7,6 +7,7 @@ from nvidia_inst.distro.detector import DistroDetectionError, detect_distro
 from nvidia_inst.gpu.compatibility import get_driver_range
 from nvidia_inst.gpu.detector import detect_gpu, has_nvidia_gpu
 from nvidia_inst.utils.logger import get_logger
+from nvidia_inst.utils.permissions import require_root
 
 logger = get_logger(__name__)
 
@@ -95,6 +96,7 @@ def detect_gui_type() -> bool:
         True if Zenity is available.
     """
     import shutil
+
     return shutil.which("zenity") is not None
 
 
@@ -133,8 +135,8 @@ def run_gui(args) -> int:
     info_text = f"""Distribution: {distro}
 
 GPU: {gpu.model}
-Compute Capability: {gpu.compute_capability or 'Unknown'}
-VRAM: {gpu.vram or 'Unknown'}
+Compute Capability: {gpu.compute_capability or "Unknown"}
+VRAM: {gpu.vram or "Unknown"}
 
 Driver: {driver_range.min_version}"""
     if driver_range.max_version:
@@ -152,10 +154,7 @@ CUDA: {driver_range.cuda_min}"""
     zenity_info("nvidia-inst - System Information", info_text)
 
     if driver_range.is_eol:
-        zenity_warning(
-            "EOL GPU",
-            f"{driver_range.eol_message}\n\nContinue anyway?"
-        )
+        zenity_warning("EOL GPU", f"{driver_range.eol_message}\n\nContinue anyway?")
 
     confirmed = zenity_question(
         "Install Driver",
@@ -164,6 +163,10 @@ CUDA: {driver_range.cuda_min}"""
 
     if not confirmed:
         return 0
+
+    if not require_root(interactive=True):
+        zenity_error("Error", "Root privileges required to install drivers")
+        return 1
 
     progress = zenity_progress("Installing", "Installing driver...", 0)
 
