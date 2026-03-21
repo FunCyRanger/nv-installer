@@ -194,8 +194,22 @@ def check_nvidia_open_installed() -> bool:
         True if nvidia-open is installed, False otherwise.
     """
     nvidia_open_pkgs = {
-        "ubuntu": ["nvidia-driver-535-open", "nvidia-driver-550-open"],
-        "debian": ["nvidia-driver-open"],
+        "ubuntu": [
+            "nvidia-driver-535-open",
+            "nvidia-driver-550-open",
+            "nvidia-driver-580-open",
+        ],
+        "debian": ["nvidia-open", "nvidia-open-kernel-dkms"],
+        "linuxmint": [
+            "nvidia-driver-535-open",
+            "nvidia-driver-550-open",
+            "nvidia-driver-580-open",
+        ],
+        "pop": [
+            "nvidia-driver-535-open",
+            "nvidia-driver-550-open",
+            "nvidia-driver-580-open",
+        ],
         "fedora": ["xorg-x11-drv-nvidia-open"],
         "centos": ["xorg-x11-drv-nvidia-open"],
         "rhel": ["xorg-x11-drv-nvidia-open"],
@@ -203,8 +217,8 @@ def check_nvidia_open_installed() -> bool:
         "alma": ["xorg-x11-drv-nvidia-open"],
         "arch": ["nvidia-open"],
         "manjaro": ["nvidia-open"],
-        "opensuse": ["x11-video-nvidiaG06"],
-        "sles": ["x11-video-nvidiaG06"],
+        "opensuse": ["nvidia-open-driver-G06"],
+        "sles": ["nvidia-open-driver-G06"],
     }
 
     from nvidia_inst.distro.detector import detect_distro
@@ -236,9 +250,17 @@ def check_nvidia_open_installed() -> bool:
             )
             if result.returncode == 0:
                 return True
-        elif distro_id in ("arch", "manjaro", "opensuse", "sles"):
+        elif distro_id in ("arch", "manjaro"):
             result = subprocess.run(
                 ["pacman", "-Q"] + packages,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                return True
+        elif distro_id in ("opensuse", "sles"):
+            result = subprocess.run(
+                ["rpm", "-q"] + packages,
                 capture_output=True,
                 text=True,
             )
@@ -665,32 +687,56 @@ def get_nvidia_open_packages(
     Returns:
         List of nvidia-open package names.
     """
-    if distro_id in ("ubuntu", "linuxmint", "pop"):
-        return _get_ubuntu_nvidia_open_packages(driver_range)
+    if distro_id in ("ubuntu", "debian", "linuxmint", "pop"):
+        return _get_apt_nvidia_open_packages(driver_range)
     elif distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
         return _get_fedora_nvidia_open_packages()
     elif distro_id in ("arch", "manjaro"):
-        return ["nvidia-open", "nvidia-settings"]
+        return _get_arch_nvidia_open_packages()
     elif distro_id in ("opensuse", "sles"):
-        return ["x11-video-nvidiaG06", "nvidia-computeG06"]
+        return _get_opensuse_nvidia_open_packages()
 
     return []
 
 
-def _get_ubuntu_nvidia_open_packages(driver_range: DriverRange) -> list[str]:
-    """Get Ubuntu NVIDIA Open packages."""
+def _get_apt_nvidia_open_packages(driver_range: DriverRange) -> list[str]:
+    """Get APT-based NVIDIA Open packages (Ubuntu/Debian/Mint/Pop)."""
     if driver_range.max_branch == "580":
-        return ["nvidia-driver-550-open", "nvidia-dkms-550"]
+        return [
+            "nvidia-driver-550-open",
+            "nvidia-dkms-550-open",
+            "nvidia-settings",
+        ]
     if driver_range.max_branch == "590":
-        return ["nvidia-driver-535-open", "nvidia-dkms-535"]
+        return [
+            "nvidia-driver-535-open",
+            "nvidia-dkms-535-open",
+            "nvidia-settings",
+        ]
 
-    return ["nvidia-driver-535-open", "nvidia-dkms-535"]
+    return [
+        "nvidia-driver-535-open",
+        "nvidia-dkms-535-open",
+        "nvidia-settings",
+    ]
+
+
+def _get_arch_nvidia_open_packages() -> list[str]:
+    """Get Arch Linux NVIDIA Open packages."""
+    return ["nvidia-open"]
+
+
+def _get_opensuse_nvidia_open_packages() -> list[str]:
+    """Get openSUSE NVIDIA Open packages."""
+    return [
+        "nvidia-open-driver-G06",
+        "nvidia-compute-G06",
+    ]
 
 
 def _get_fedora_nvidia_open_packages() -> list[str]:
     """Get Fedora NVIDIA Open packages."""
     return [
-        "akmod-nvidia",
         "xorg-x11-drv-nvidia-open",
         "xorg-x11-drv-nvidia-open-cuda",
     ]
