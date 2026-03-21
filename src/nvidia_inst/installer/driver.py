@@ -138,6 +138,23 @@ def check_secure_boot() -> bool:
         return False
 
 
+def get_current_driver_type() -> str:
+    """Detect current driver type.
+
+    Returns:
+        'proprietary' - NVIDIA proprietary driver loaded
+        'nouveau'     - Nouveau open-source driver loaded
+        'none'        - No NVIDIA driver detected
+    """
+    from nvidia_inst.installer.validation import is_nvidia_working
+
+    if is_nvidia_working().is_working:
+        return "proprietary"
+    if check_nouveau():
+        return "nouveau"
+    return "none"
+
+
 def disable_nouveau() -> bool:
     """Disable Nouveau kernel module.
 

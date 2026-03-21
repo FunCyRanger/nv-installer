@@ -1,7 +1,10 @@
 """Command-line interface for nvidia-inst."""
 
 import argparse
+import subprocess
 import sys
+from dataclasses import dataclass
+from enum import Enum
 from typing import Any
 
 from nvidia_inst.distro.detector import (
@@ -23,11 +26,9 @@ from nvidia_inst.gpu.detector import (
 )
 from nvidia_inst.gpu.matrix.data import GPUGenerationInfo
 from nvidia_inst.installer.driver import (
-    DriverInstallError,
-    check_nouveau,
     check_secure_boot,
-    disable_nouveau,
     get_compatible_driver_packages,
+    get_current_driver_type,
 )
 from nvidia_inst.installer.prerequisites import PrerequisitesChecker
 from nvidia_inst.installer.secureboot import (
@@ -47,11 +48,42 @@ from nvidia_inst.installer.uninstaller import (
 )
 from nvidia_inst.installer.validation import (
     is_nvidia_working,
-    post_install_validate,
-    pre_install_check,
-    unblock_nouveau,
 )
 from nvidia_inst.utils.logger import get_logger, setup_logging
+
+
+class DriverStatus(Enum):
+    """Driver installation status."""
+
+    OPTIMAL = "optimal"
+    WRONG_BRANCH = "wrong_branch"
+    NOUVEAU_ACTIVE = "nouveau_active"
+    BROKEN_INSTALL = "broken_install"
+    NOTHING = "nothing"
+
+
+@dataclass
+class DriverOption:
+    """A menu option for driver management."""
+
+    number: int
+    description: str
+    action: str
+    recommended: bool = False
+
+
+@dataclass
+class DriverState:
+    """Current state of NVIDIA driver installation."""
+
+    status: DriverStatus
+    current_version: str | None
+    is_compatible: bool
+    is_optimal: bool
+    suggested_packages: list[str] | None
+    options: list[DriverOption]
+    message: str
+
 
 logger = get_logger(__name__)
 
@@ -245,6 +277,139 @@ def print_compatibility_info(
 
     print("\nStatus:")
     print(f"  {'Compatible' if not driver_range.is_eol else 'Limited (EOL GPU)'}")
+
+
+def detect_driver_state(
+    gpu: GPUInfo,
+    driver_range: DriverRange,
+    distro_id: str,
+) -> DriverState:
+    """Detect current driver state and available options.
+
+    Args:
+        gpu: Detected GPU information.
+        driver_range: Compatible driver range for the GPU.
+        distro_id: Distribution ID.
+
+    Returns:
+        DriverState with current status and available options.
+    """
+    driver_type = get_current_driver_type()
+    working = is_nvidia_working()
+
+    if working.is_working:
+        compatible = (
+            is_driver_compatible(working.driver_version, gpu)
+            if working.driver_version
+            else False
+        )
+        suggested = get_compatible_driver_packages(distro_id, driver_range)
+
+        if compatible:
+            return DriverState(
+                status=DriverStatus.OPTIMAL,
+                current_version=working.driver_version,
+                is_compatible=True,
+                is_optimal=True,
+                suggested_packages=suggested,
+                options=[
+                    DriverOption(1, "Upgrade to latest", "upgrade", recommended=True),
+                    DriverOption(2, "Keep current driver", "keep"),
+                    DriverOption(
+                        3, "Switch to Nouveau (open-source)", "revert_nouveau"
+                    ),
+                ],
+                message=f"NVIDIA driver {working.driver_version} is working optimally",
+            )
+        else:
+            return DriverState(
+                status=DriverStatus.WRONG_BRANCH,
+                current_version=working.driver_version,
+                is_compatible=False,
+                is_optimal=False,
+                suggested_packages=suggested,
+                options=[
+                    DriverOption(
+                        1,
+                        f"Install correct branch ({driver_range.max_branch})",
+                        "install",
+                        recommended=True,
+                    ),
+                    DriverOption(2, "Keep current driver", "keep"),
+                    DriverOption(
+                        3, "Switch to Nouveau (open-source)", "revert_nouveau"
+                    ),
+                ],
+                message=f"Driver {working.driver_version} may not be optimal for {gpu.model}",
+            )
+
+    elif driver_type == "nouveau":
+        suggested = get_compatible_driver_packages(distro_id, driver_range)
+        return DriverState(
+            status=DriverStatus.NOUVEAU_ACTIVE,
+            current_version=None,
+            is_compatible=False,
+            is_optimal=False,
+            suggested_packages=suggested,
+            options=[
+                DriverOption(
+                    1, "Install proprietary driver", "install", recommended=True
+                ),
+                DriverOption(2, "Keep Nouveau driver", "keep"),
+            ],
+            message="Nouveau (open-source) driver is active",
+        )
+
+    else:
+        suggested = get_compatible_driver_packages(distro_id, driver_range)
+        return DriverState(
+            status=DriverStatus.NOTHING,
+            current_version=None,
+            is_compatible=False,
+            is_optimal=False,
+            suggested_packages=suggested,
+            options=[
+                DriverOption(1, "Install driver", "install", recommended=True),
+                DriverOption(2, "Cancel", "cancel"),
+            ],
+            message="No NVIDIA driver installed",
+        )
+
+
+def show_driver_options(state: DriverState) -> int:
+    """Show driver options menu and return selected option.
+
+    Args:
+        state: Current driver state with available options.
+
+    Returns:
+        Selected DriverOption, or None to cancel.
+    """
+    print(f"\n{'=' * 50}")
+    print(" Driver Status")
+    print(f"{'=' * 50}")
+    print(f"\n{state.message}")
+
+    if state.current_version:
+        print(f"  Installed: {state.current_version}")
+
+    if not state.is_compatible and state.suggested_packages:
+        print(f"  Recommended: {' '.join(state.suggested_packages)}")
+
+    print("\nOptions:")
+    for opt in state.options:
+        rec = " [RECOMMENDED]" if opt.recommended else ""
+        print(f"  [{opt.number}] {opt.description}{rec}")
+
+    while True:
+        try:
+            choice = input("\nSelect option: ")
+            choice_num = int(choice)
+            if any(opt.number == choice_num for opt in state.options):
+                return choice_num
+            print("Invalid option. Please enter a number from the list.")
+        except ValueError:
+            print("Invalid input. Please enter a number.")
 
 
 def check_prerequisites(
@@ -479,6 +644,262 @@ def print_version_check(version_check: Any, driver_range: Any) -> None:
         print("\n[✓] PASSED - Compatible driver available")
 
 
+def _get_packages_to_remove(distro_id: str) -> list[str]:
+    """Get list of NVIDIA packages to remove based on distro."""
+    if distro_id in ("ubuntu", "debian", "linuxmint", "pop"):
+        return [
+            "nvidia-driver-*",
+            "nvidia-dkms-*",
+            "nvidia-kernel-common-*",
+            "nvidia-kernel-source-*",
+            "nvidia-settings",
+            "nvidia-utils-*",
+            "libnvidia-*",
+            "xserver-xorg-video-nvidia",
+        ]
+    if distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
+        return [
+            "akmod-nvidia",
+            "xorg-x11-drv-nvidia",
+            "xorg-x11-drv-nvidia-cuda",
+            "xorg-x11-drv-nvidia-drm",
+            "xorg-x11-drv-nvidia-kmodsrc",
+            "nvidia-persistenced",
+            "nvidia-settings",
+        ]
+    if distro_id in ("arch", "manjaro"):
+        return [
+            "nvidia",
+            "nvidia-open",
+            "nvidia-580xx-dkms",
+            "nvidia-470xx-dkms",
+            "nvidia-utils",
+            "nvidia-settings",
+            "lib32-nvidia-utils",
+            "lib32-nvidia-580xx-utils",
+            "lib32-nvidia-470xx-utils",
+        ]
+    if distro_id in ("opensuse", "sles"):
+        return [
+            "x11-video-nvidiaG05",
+            "x11-video-nvidiaG04",
+            "nvidia-computeG05",
+            "nvidia-computeG04",
+        ]
+    return []
+
+
+def _remove_packages(distro_id: str, packages: list[str]) -> list[str]:
+    """Remove packages using the distribution's package manager."""
+    removed = []
+    for pkg_pattern in packages:
+        try:
+            if distro_id in ("ubuntu", "debian", "linuxmint", "pop"):
+                cmd = ["apt-get", "remove", "--purge", "-y", pkg_pattern]
+            elif distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
+                cmd = ["dnf", "remove", "-y", pkg_pattern]
+            elif distro_id in ("arch", "manjaro"):
+                cmd = ["pacman", "-Rns", "--noconfirm", pkg_pattern]
+            elif distro_id in ("opensuse", "sles"):
+                cmd = ["zypper", "remove", "-y", pkg_pattern]
+            else:
+                continue
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode == 0:
+                logger.info(f"Removed: {pkg_pattern}")
+                removed.append(pkg_pattern)
+        except (subprocess.TimeoutExpired, Exception) as e:
+            logger.warning(f"Failed to remove {pkg_pattern}: {e}")
+
+    return removed
+
+
+def _rebuild_initramfs(distro_id: str) -> bool:
+    """Rebuild initramfs for the distribution."""
+    try:
+        if distro_id in (
+            "fedora",
+            "rhel",
+            "centos",
+            "rocky",
+            "alma",
+            "opensuse",
+            "sles",
+        ):
+            cmd = ["dracut", "-f", "--regenerate-all"]
+        elif distro_id in ("arch", "manjaro"):
+            cmd = ["mkinitcpio", "-P"]
+        else:
+            cmd = ["update-initramfs", "-u"]
+
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        return result.returncode == 0
+    except Exception as e:
+        logger.warning(f"Initramfs rebuild failed: {e}")
+        return False
+
+
+def _prompt_reboot() -> None:
+    """Prompt user to reboot."""
+    print("\nPlease reboot your system for changes to take effect.")
+    response = input("Reboot now? [y/N]: ")
+    if response.lower() in ("y", "yes"):
+        try:
+            subprocess.run(["sudo", "reboot"])
+        except Exception:
+            print("Reboot command failed. Please reboot manually.")
+
+
+def _dry_run_change(
+    state: DriverState,
+    packages: list[str],
+    distro: DistroInfo,
+) -> None:
+    """Show dry-run output for driver change."""
+    print("\n" + "=" * 50)
+    print(" DRY-RUN MODE")
+    print("=" * 50)
+
+    print(f"\nCurrent state: {state.message}")
+    if state.current_version:
+        print(f"  Installed: {state.current_version}")
+
+    print(f"\nTarget packages: {' '.join(packages)}")
+
+    print("\nSteps to execute manually:")
+    if state.current_version or state.status == DriverStatus.NOUVEAU_ACTIVE:
+        if distro.id in ("ubuntu", "debian"):
+            print("  1. sudo apt remove --purge -y nvidia-driver-* nvidia-dkms-*")
+        elif distro.id in ("fedora", "rhel", "centos"):
+            print("  1. sudo dnf remove -y akmod-nvidia xorg-x11-drv-nvidia*")
+        elif distro.id in ("arch", "manjaro"):
+            print("  1. sudo pacman -Rns --noconfirm nvidia nvidia-utils")
+        elif distro.id in ("opensuse", "sles"):
+            print("  1. sudo zypper remove -y x11-video-nvidiaG05")
+    if distro.id in ("ubuntu", "debian"):
+        print("  2. sudo apt update")
+        print(f"  3. sudo apt install -y {' '.join(packages)}")
+        print("  4. sudo update-initramfs -u")
+    elif distro.id in ("fedora", "rhel", "centos"):
+        print("  2. sudo dnf makecache")
+        print(f"  3. sudo dnf install -y {' '.join(packages)}")
+        print("  4. sudo dracut -f --regenerate-all")
+    elif distro.id in ("arch", "manjaro"):
+        print("  2. sudo pacman -Sy")
+        print(f"  3. sudo pacman -S --noconfirm {' '.join(packages)}")
+        print("  4. sudo mkinitcpio -P")
+    print("  5. sudo reboot")
+
+    print("\nOr run this script without --dry-run:")
+    print("  sudo nvidia-inst")
+
+
+def execute_driver_change(
+    option: DriverOption,
+    state: DriverState,
+    distro: DistroInfo,
+    gpu: GPUInfo,
+    driver_range: DriverRange,
+    dry_run: bool = False,
+) -> int:
+    """Execute the selected driver change.
+
+    Args:
+        option: Selected driver option.
+        state: Current driver state.
+        distro: Distribution information.
+        gpu: GPU information.
+        driver_range: Compatible driver range.
+        dry_run: If True, show what would happen without executing.
+
+    Returns:
+        0 on success, 1 on failure.
+    """
+    if option.action == "keep":
+        print("\nNo changes made.")
+        return 0
+
+    if option.action == "cancel":
+        print("\nCancelled.")
+        return 0
+
+    if option.action == "revert_nouveau":
+        print("\n[WARNING] This will remove NVIDIA proprietary driver.")
+        response = input("Continue? [y/N]: ")
+        if response.lower() not in ("y", "yes"):
+            print("Cancelled.")
+            return 0
+
+        print("\nRemoving proprietary driver...")
+        result = revert_to_nouveau(distro.id)
+        if result.success:
+            print(f"\n✓ {result.message}")
+            _prompt_reboot()
+        else:
+            print(f"\n✗ Revert failed: {', '.join(result.errors)}")
+            return 1
+        return 0
+
+    if option.action in ("install", "upgrade"):
+        packages = state.suggested_packages or get_compatible_driver_packages(
+            distro.id, driver_range
+        )
+
+        if dry_run:
+            _dry_run_change(state, packages, distro)
+            return 0
+
+        driver_type = get_current_driver_type()
+        if driver_type == "nouveau":
+            print("\nNouveau is active. Installing proprietary driver.")
+            print("Note: Nouveau blacklist will be created automatically.")
+        else:
+            print("\nRemoving old driver packages...")
+            packages_to_remove = _get_packages_to_remove(distro.id)
+            removed = _remove_packages(distro.id, packages_to_remove)
+            if removed:
+                print(f"  Removed: {', '.join(removed)}")
+
+        print(f"\nInstalling: {' '.join(packages)}")
+        pkg_manager = get_package_manager()
+        try:
+            pkg_manager.install(packages)
+        except Exception as e:
+            logger.error(f"Installation failed: {e}")
+            print(f"Installation failed: {e}")
+            return 1
+
+        print("\nRebuilding initramfs...")
+        if not _rebuild_initramfs(distro.id):
+            print("[WARNING] Initramfs rebuild had issues. Reboot may fail.")
+
+        if check_secure_boot():
+            print("\nSecure Boot detected. Re-signing modules...")
+            key_paths = get_mok_key_paths(distro.id)
+            signed, failed = sign_nvidia_modules(
+                key_paths.private_key,
+                key_paths.public_cert,
+            )
+            if signed > 0:
+                print(f"  Signed: {signed}, Failed: {failed}")
+            else:
+                print(
+                    "[WARNING] Module signing failed. Driver may not load with Secure Boot."
+                )
+
+        print("\n✓ Driver installed successfully")
+        _prompt_reboot()
+        return 0
+
+    return 0
+
+
 def install_driver_cli(
     driver_version: str | None = None,
     with_cuda: bool = True,
@@ -532,150 +953,13 @@ def install_driver_cli(
             distro, gpu, driver_range, driver_version, with_cuda, cuda_version
         )
 
-    working_check = is_nvidia_working()
-    if working_check.is_working:
-        print(
-            f"\n[INFO] NVIDIA driver is already working (version {working_check.driver_version})"
-        )
-        driver_incompatible = working_check.driver_version and not is_driver_compatible(
-            working_check.driver_version, gpu
-        )
-        if driver_incompatible:
-            print(f"[WARNING] Installed driver may not be optimal for {gpu.model}")
-            print(
-                f"  Recommended: {driver_range.min_version} - {driver_range.max_version or 'latest'}"
-            )
-            print("  → Re-running this script will install the correct driver")
-            print("Proceeding will install the correct driver branch.")
-        else:
-            print("Proceeding will upgrade to the latest compatible driver.")
-        if not skip_confirmation:
-            response = input("\nSkip installation? [Y/n]: ")
-            if response.lower() not in ("n", "no"):
-                print("Installation skipped.")
-                return 0
+    state = detect_driver_state(gpu, driver_range, distro.id)
+    selected = show_driver_options(state)
+    option = next(opt for opt in state.options if opt.number == selected)
 
-    if not skip_confirmation:
-        response = input("\nProceed with installation? [y/N]: ")
-        if response.lower() not in ("y", "yes"):
-            print("Installation cancelled.")
-            return 1
-
-    nouveau_disabled = False
-    if check_nouveau():
-        logger.warning("Nouveau kernel module is loaded")
-        response = input("Nouveau is loaded. Disable it? [y/N]: ")
-        if response.lower() in ("y", "yes"):
-            disable_nouveau()
-            nouveau_disabled = True
-            print("Nouveau has been disabled.")
-
-    sb_completed, sb_state = handle_secure_boot(distro.id, skip_confirmation)
-
-    if sb_state == SecureBootState.ENABLED and not sb_completed:
-        print("\n[WARNING] Secure Boot signing not set up.")
-        response = input("Continue anyway without signing? [y/N]: ")
-        if response.lower() not in ("y", "yes"):
-            print("Installation cancelled.")
-            return 1
-
-    try:
-        pkg_manager = get_package_manager()
-        packages = get_compatible_driver_packages(
-            distro.id,
-            driver_range,
-        )
-
-        # Pre-installation safety check
-        print("\nRunning safety checks...")
-        safety = pre_install_check(distro.id, packages, pkg_manager)
-
-        if not safety.can_proceed:
-            print("\n[ERROR] Cannot proceed with installation:")
-            for err in safety.errors:
-                print(f"  - {err}")
-            return 1
-
-        if safety.warnings:
-            print("\n[WARNING] Potential issues detected:")
-            for warn in safety.warnings:
-                print(f"  - {warn}")
-
-            response = input("\nContinue anyway? [y/N]: ")
-            if response.lower() not in ("y", "yes"):
-                print("Installation cancelled.")
-                return 1
-
-        # Install packages
-        print("\nInstalling driver packages...")
-        for pkg in packages:
-            print(f"  - {pkg}")
-        print("(This may take a few minutes...)\n")
-
-        pkg_manager.install(packages)
-
-        # Post-installation validation
-        print("Validating installation...")
-        validation = post_install_validate(distro.id, packages, pkg_manager)
-
-        # ALWAYS show success message
-        logger.info("Driver installation completed")
-        print("\nDriver installed successfully!")
-
-        # Show installed packages
-        print("\nInstalled packages:")
-        for pkg in packages:
-            if pkg in validation.installed_packages:
-                print(f"  ✓ {pkg}")
-            else:
-                print(f"  ✗ {pkg} (not found)")
-
-        # Show validation issues (if any)
-        if validation.warnings or validation.errors:
-            print("\nValidation notes:")
-            for err in validation.errors:
-                print(f"  ✗ {err}")
-            for warn in validation.warnings:
-                print(f"  ⚠ {warn}")
-
-        # If validation failed and Nouveau was disabled, try to re-enable it
-        if not validation.success and nouveau_disabled:
-            print("\n[WARNING] Validation issues detected.")
-            print("Attempting to re-enable Nouveau for bootable system...")
-            success, message = unblock_nouveau()
-            if success:
-                print(f"  ✓ {message}")
-                print("\nIMPORTANT: Driver may not work properly.")
-                print("If system fails to boot to graphical mode:")
-                print("  - Boot to recovery mode")
-                print("  - Run: sudo rm /etc/modprobe.d/blacklist-nouveau.conf")
-                print("  - Run: sudo dracut -f && reboot")
-                print(
-                    "\nAfter fixing, you can manually block Nouveau once driver works."
-                )
-                nouveau_disabled = False
-            else:
-                print(f"  ✗ Could not re-enable Nouveau: {message}")
-                print("  Manual fix: sudo rm /etc/modprobe.d/blacklist-nouveau.conf")
-
-        # ALWAYS prompt for reboot
-        if nouveau_disabled:
-            print("\nIMPORTANT: Nouveau was disabled. You MUST reboot now.")
-            print("Please reboot your system for changes to take effect.")
-        else:
-            print("\nPlease reboot your system for changes to take effect.")
-
-    except DriverInstallError as e:
-        logger.error(f"Installation failed: {e}")
-        print(f"Installation failed: {e}")
-        return 1
-
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        print(f"Error: {e}")
-        return 1
-
-    return 0
+    return execute_driver_change(
+        option, state, distro, gpu, driver_range, dry_run=False
+    )
 
 
 def _run_dry_run(
