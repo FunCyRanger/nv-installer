@@ -124,6 +124,8 @@ class TestDetectDriverState:
         dr.is_eol = False
         dr.is_limited = False
         dr.min_version = "520.56.06"
+        dr.cuda_min = "11.0"
+        dr.cuda_max = "12.2"
         return dr
 
     def test_optimal_driver(self, mock_gpu, mock_driver_range):
@@ -133,6 +135,8 @@ class TestDetectDriverState:
             patch("nvidia_inst.cli.is_nvidia_working") as mock_working,
             patch("nvidia_inst.cli.is_driver_compatible") as mock_compat,
             patch("nvidia_inst.cli.get_compatible_driver_packages") as mock_pkgs,
+            patch("nvidia_inst.cli.check_nvidia_open_available") as mock_open_avail,
+            patch("nvidia_inst.cli.check_nonfree_available") as mock_nonfree_avail,
         ):
             mock_type.return_value = "proprietary"
             mock_working.return_value = MagicMock(
@@ -140,6 +144,8 @@ class TestDetectDriverState:
             )
             mock_compat.return_value = True
             mock_pkgs.return_value = ["nvidia-driver-535"]
+            mock_open_avail.return_value = True
+            mock_nonfree_avail.return_value = True
 
             from nvidia_inst.cli import detect_driver_state
 
@@ -148,7 +154,7 @@ class TestDetectDriverState:
             assert state.status.value == "optimal"
             assert state.current_version == "590.48.01"
             assert state.is_optimal is True
-            assert len(state.options) == 3
+            assert len(state.options) == 4
             assert state.options[0].recommended is True
 
     def test_wrong_branch(self, mock_gpu, mock_driver_range):
@@ -180,17 +186,21 @@ class TestDetectDriverState:
             patch("nvidia_inst.cli.get_current_driver_type") as mock_type,
             patch("nvidia_inst.cli.is_nvidia_working") as mock_working,
             patch("nvidia_inst.cli.get_compatible_driver_packages") as mock_pkgs,
+            patch("nvidia_inst.cli.check_nvidia_open_available") as mock_open_avail,
+            patch("nvidia_inst.cli.check_nonfree_available") as mock_nonfree_avail,
         ):
             mock_type.return_value = "nouveau"
             mock_working.return_value = MagicMock(is_working=False)
             mock_pkgs.return_value = ["nvidia-driver-535"]
+            mock_open_avail.return_value = True
+            mock_nonfree_avail.return_value = True
 
             from nvidia_inst.cli import detect_driver_state
 
             state = detect_driver_state(mock_gpu, mock_driver_range, "ubuntu")
 
             assert state.status.value == "nouveau_active"
-            assert len(state.options) == 2
+            assert len(state.options) == 3
             assert state.options[0].action == "install"
 
     def test_nothing_installed(self, mock_gpu, mock_driver_range):
@@ -199,15 +209,19 @@ class TestDetectDriverState:
             patch("nvidia_inst.cli.get_current_driver_type") as mock_type,
             patch("nvidia_inst.cli.is_nvidia_working") as mock_working,
             patch("nvidia_inst.cli.get_compatible_driver_packages") as mock_pkgs,
+            patch("nvidia_inst.cli.check_nvidia_open_available") as mock_open_avail,
+            patch("nvidia_inst.cli.check_nonfree_available") as mock_nonfree_avail,
         ):
             mock_type.return_value = "none"
             mock_working.return_value = MagicMock(is_working=False)
             mock_pkgs.return_value = ["nvidia-driver-535"]
+            mock_open_avail.return_value = True
+            mock_nonfree_avail.return_value = True
 
             from nvidia_inst.cli import detect_driver_state
 
             state = detect_driver_state(mock_gpu, mock_driver_range, "ubuntu")
 
             assert state.status.value == "nothing"
-            assert len(state.options) == 3
+            assert len(state.options) == 4
             assert state.options[-1].action == "cancel"
