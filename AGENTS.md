@@ -166,6 +166,62 @@ __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia <app>
 
 ---
 
+## GUI Support
+
+nvidia-inst provides both Tkinter and Zenity GUI implementations with full driver state detection and option handling.
+
+### GUI Features
+
+Both GUIs implement:
+- **Driver State Detection**: Uses `detect_driver_state()` from cli.py to determine current state
+- **Option Selection**: Shows appropriate options based on driver state:
+  - Upgrade to latest
+  - Keep current driver
+  - Switch to NVIDIA Open (when available)
+  - Switch to Nouveau
+  - Install/switch options for different driver states
+- **Root Privilege Handling**: Requests root privileges before executing operations
+- **Error Handling**: Shows appropriate error dialogs for failures
+
+### Tkinter GUI
+
+```python
+from nvidia_inst.gui.tkinter_gui import NvidiaInstGUI, run_gui
+
+# In main.py
+root = tk.Tk()
+app = NvidiaInstGUI(root)
+root.mainloop()
+```
+
+Key features:
+- Tabbed interface: System Information, Driver Information, Log
+- Options dialog with radio button selection
+- Progress feedback during operations
+
+### Zenity GUI
+
+```python
+from nvidia_inst.gui.zenity_gui import run_gui, zenity_show_options
+
+# In main.py
+run_gui(args)
+```
+
+Key features:
+- Works in terminal or desktop environment
+- Uses zenity dialogs for all interactions
+- List-based option selection with description matching
+
+### GUI Development Guidelines
+
+- **Root Privileges**: Always use `require_root()` before driver operations
+- **State Handling**: Call `detect_driver_state()` to get available options
+- **Option Execution**: Use `execute_driver_change()` with selected option
+- **Error Handling**: Wrap operations in try/except with appropriate dialogs
+
+---
+
 ## Python Code Style
 
 ### Imports (PEP 8, sorted alphabetically)
