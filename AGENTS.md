@@ -20,6 +20,84 @@ make lint, make test, make format        # Make targets
 
 ---
 
+## CUDA Support by GPU Generation
+
+### CUDA Support by Driver Type
+
+| Driver | CUDA Support | GPU Generations |
+|--------|-------------|-----------------|
+| **Proprietary** | Full CUDA | All (Kepler → Blackwell) |
+| **NVIDIA Open** | Full CUDA | Turing+ ONLY (Turing → Blackwell) |
+| **Nouveau** | No CUDA | All (no CUDA support ever) |
+
+**Important**: NVIDIA Open is only available for Turing+ GPUs. Older generations
+(Maxwell, Pascal, Volta) must use proprietary drivers for CUDA support.
+
+### CUDA Version Ranges by GPU Generation
+
+| Generation | Examples | CUDA Min | CUDA Max | Driver Branch |
+|------------|----------|----------|----------|---------------|
+| Blackwell | RTX 5090, 5080, GB200 | 12.4 | 13.x | 590/595 |
+| Ada Lovelace | RTX 4090, 4080, L40 | 11.8 | 12.8 | 590 |
+| Ampere | RTX 3090, 3080, A100 | 11.0 | 12.8 | 590 |
+| Turing | RTX 2080, GTX 1650, T4 | 10.0 | 12.8 | 590 |
+| Volta | V100, Titan V | 9.0 | 12.8 | 580 (Limited) |
+| Pascal | GTX 1080, P100 | 8.0 | 12.8 | 580 (Limited) |
+| Maxwell | GTX 980, 970, M-series | 7.5 | 12.8 | 580 (Limited) |
+| Kepler | GTX 780, K-series | 7.5 | 9.0 | 470 (EOL) |
+
+### When CUDA Is NOT Possible
+
+1. **Nouveau driver**: Open-source Xorg driver has NO CUDA support
+2. **Kepler GPUs**: EOL status, limited to CUDA 9.0 max (security updates only)
+
+---
+
+## Driver Recommendations
+
+Both proprietary and NVIDIA Open are valid configurations. The choice depends on user needs.
+
+### Proprietary Driver (Recommended for most users)
+- **Best performance and feature support**
+- Full CUDA compatibility for all GPU generations
+- Proprietary blob with closed-source kernel modules
+- Available in non-free repositories
+
+### NVIDIA Open Driver (For open-source enthusiasts)
+- **Open kernel modules** while maintaining CUDA support
+- Turing+ GPUs only (availability depends on repository support)
+- Same CUDA capabilities as proprietary driver
+- Use when distro supports `nvidia-open` packages
+
+### Nouveau Driver (For non-CUDA workloads)
+- **Open-source Xorg driver** built into Linux kernel
+- NO CUDA support whatsoever
+- Use for basic display only
+- Default fallback when proprietary drivers unavailable
+
+---
+
+## Driver State Detection
+
+The CLI automatically detects current driver state and builds appropriate options:
+
+```python
+# Driver states (from cli.py)
+class DriverStatus(Enum):
+    OPTIMAL = "optimal"           # Proprietary driver working
+    WRONG_BRANCH = "wrong_branch" # Driver may not be optimal
+    NVIDIA_OPEN_ACTIVE = "nvidia_open_active"
+    NOUVEAU_ACTIVE = "nouveau_active"
+    BROKEN_INSTALL = "broken_install"
+    NOTHING = "nothing"           # No driver installed
+
+# CLI option building based on state
+def _build_nothing_options(cuda_range, nvidia_open_available, nonfree_available):
+    # Builds: [Proprietary (RECOMMENDED), NVIDIA Open, Nouveau, Cancel]
+```
+
+---
+
 ## Python Code Style
 
 ### Imports (PEP 8, sorted alphabetically)
