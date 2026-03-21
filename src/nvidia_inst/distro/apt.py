@@ -47,11 +47,10 @@ class AptManager(PackageManager):
         """Install packages using apt."""
         from nvidia_inst.utils.permissions import is_root
 
-        if not is_root():
-            raise PermissionError("Root privileges required to install packages")
-
         try:
             cmd = [self._apt_path, "install", "-y"] + packages
+            if not is_root():
+                cmd = ["sudo"] + cmd
             subprocess.run(cmd, check=True, capture_output=True)
             logger.info(f"Installed packages: {', '.join(packages)}")
             return True
@@ -65,12 +64,10 @@ class AptManager(PackageManager):
         """Remove packages using apt."""
         from nvidia_inst.utils.permissions import is_root
 
-        if not is_root():
-            logger.error("Root privileges required to remove packages")
-            return False
-
         try:
             cmd = [self._apt_path, "remove", "-y"] + packages
+            if not is_root():
+                cmd = ["sudo"] + cmd
             subprocess.run(cmd, check=True, capture_output=True)
             logger.info(f"Removed packages: {', '.join(packages)}")
             return True

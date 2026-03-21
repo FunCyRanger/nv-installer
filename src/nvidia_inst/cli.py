@@ -990,6 +990,8 @@ def _remove_packages(distro_id: str, packages: list[str]) -> list[str]:
 
 def _rebuild_initramfs(distro_id: str) -> bool:
     """Rebuild initramfs for the distribution."""
+    from nvidia_inst.utils.permissions import is_root
+
     try:
         if distro_id in (
             "fedora",
@@ -1005,6 +1007,9 @@ def _rebuild_initramfs(distro_id: str) -> bool:
             cmd = ["mkinitcpio", "-P"]
         else:
             cmd = ["update-initramfs", "-u"]
+
+        if not is_root():
+            cmd = ["sudo"] + cmd
 
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
         return result.returncode == 0

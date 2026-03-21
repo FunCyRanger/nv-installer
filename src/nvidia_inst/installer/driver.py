@@ -1,6 +1,5 @@
 """Driver installation for different distributions."""
 
-import os
 import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -461,17 +460,25 @@ def disable_nouveau() -> bool:
         True if successful, False otherwise.
     """
     from nvidia_inst.distro.detector import detect_distro
+    from nvidia_inst.utils.permissions import is_root
 
     nouveau_blacklist = "/etc/modprobe.d/blacklist-nouveau.conf"
 
-    if os.geteuid() != 0:
-        logger.error("Root privileges required to disable Nouveau")
-        return False
-
     try:
-        with open(nouveau_blacklist, "w") as f:
-            f.write("blacklist nouveau\n")
-            f.write("options nouveau modeset=0\n")
+        blacklist_content = "blacklist nouveau\noptions nouveau modeset=0\n"
+
+        if is_root():
+            with open(nouveau_blacklist, "w") as f:
+                f.write(blacklist_content)
+        else:
+            # Use tee with sudo to write the blacklist file
+            subprocess.run(
+                ["sudo", "tee", nouveau_blacklist],
+                input=blacklist_content,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
 
         try:
             distro = detect_distro()
@@ -493,15 +500,18 @@ def disable_nouveau() -> bool:
         else:
             cmd = ["update-initramfs", "-u"]
 
+        if not is_root():
+            cmd = ["sudo"] + cmd
+
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
 
         if result.returncode != 0:
             logger.warning(f"Initramfs rebuild command failed: {result.stderr}")
-            if cmd[0] == "dracut":
+            if cmd[-2] == "dracut" if not is_root() else cmd[0] == "dracut":
                 logger.info(
                     "Nouveau has been blacklisted. Run 'sudo dracut -f' manually if needed."
                 )
-            elif cmd[0] == "mkinitcpio":
+            elif cmd[-2] == "mkinitcpio" if not is_root() else cmd[0] == "mkinitcpio":
                 logger.info(
                     "Nouveau has been blacklisted. Run 'sudo mkinitcpio -P' manually if needed."
                 )

@@ -400,6 +400,8 @@ def _remove_blacklist() -> bool:
 
 def _rebuild_initramfs(distro_id: str) -> bool:
     """Rebuild initramfs to enable Nouveau."""
+    from nvidia_inst.utils.permissions import is_root
+
     try:
         if distro_id in (
             "fedora",
@@ -415,6 +417,9 @@ def _rebuild_initramfs(distro_id: str) -> bool:
             cmd = ["mkinitcpio", "-P"]
         else:
             cmd = ["update-initramfs", "-u"]
+
+        if not is_root():
+            cmd = ["sudo"] + cmd
 
         result = subprocess.run(
             cmd,

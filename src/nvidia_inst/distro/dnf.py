@@ -44,16 +44,15 @@ class DnfManager(PackageManager):
 
     def install(self, packages: list[str]) -> bool:
         """Install packages using dnf with progress spinner."""
-        from nvidia_inst.utils.permissions import is_root
-
-        if not is_root():
-            raise PermissionError("Root privileges required to install packages")
-
         import sys
         import time
 
+        from nvidia_inst.utils.permissions import is_root
+
         try:
             cmd = [self._dnf_path, "install", "-y"] + packages
+            if not is_root():
+                cmd = ["sudo"] + cmd
 
             spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
@@ -97,12 +96,10 @@ class DnfManager(PackageManager):
         """Remove packages using dnf."""
         from nvidia_inst.utils.permissions import is_root
 
-        if not is_root():
-            logger.error("Root privileges required to remove packages")
-            return False
-
         try:
             cmd = [self._dnf_path, "remove", "-y"] + packages
+            if not is_root():
+                cmd = ["sudo"] + cmd
             subprocess.run(cmd, check=True, capture_output=True)
             logger.info(f"Removed packages: {', '.join(packages)}")
             return True

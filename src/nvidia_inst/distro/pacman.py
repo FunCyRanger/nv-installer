@@ -46,11 +46,10 @@ class PacmanManager(PackageManager):
         """Install packages using pacman."""
         from nvidia_inst.utils.permissions import is_root
 
-        if not is_root():
-            raise PermissionError("Root privileges required to install packages")
-
         try:
             cmd = [self._pacman_path, "-S", "--noconfirm"] + packages
+            if not is_root():
+                cmd = ["sudo"] + cmd
             subprocess.run(cmd, check=True, capture_output=True)
             logger.info(f"Installed packages: {', '.join(packages)}")
             return True
@@ -64,12 +63,10 @@ class PacmanManager(PackageManager):
         """Remove packages using pacman."""
         from nvidia_inst.utils.permissions import is_root
 
-        if not is_root():
-            logger.error("Root privileges required to remove packages")
-            return False
-
         try:
             cmd = [self._pacman_path, "-R", "--noconfirm"] + packages
+            if not is_root():
+                cmd = ["sudo"] + cmd
             subprocess.run(cmd, check=True, capture_output=True)
             logger.info(f"Removed packages: {', '.join(packages)}")
             return True
