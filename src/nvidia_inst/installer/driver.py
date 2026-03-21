@@ -13,21 +13,25 @@ logger = get_logger(__name__)
 
 class DriverInstallError(Exception):
     """Raised when driver installation fails."""
+
     pass
 
 
 class NouveauLoadedError(Exception):
     """Raised when Nouveau kernel module is loaded."""
+
     pass
 
 
 class SecureBootError(Exception):
     """Raised when Secure Boot is enabled."""
+
     pass
 
 
 class KernelIncompatibleError(Exception):
     """Raised when kernel is incompatible with driver."""
+
     pass
 
 
@@ -158,7 +162,15 @@ def disable_nouveau() -> bool:
         except Exception:
             distro = None
 
-        if distro and distro.id in ("fedora", "rhel", "centos", "rocky", "alma", "opensuse", "sles"):
+        if distro and distro.id in (
+            "fedora",
+            "rhel",
+            "centos",
+            "rocky",
+            "alma",
+            "opensuse",
+            "sles",
+        ):
             cmd = ["dracut", "-f"]
         elif distro and distro.id in ("arch", "manjaro", "endeavouros"):
             cmd = ["mkinitcpio", "-P"]
@@ -170,11 +182,17 @@ def disable_nouveau() -> bool:
         if result.returncode != 0:
             logger.warning(f"Initramfs rebuild command failed: {result.stderr}")
             if cmd[0] == "dracut":
-                logger.info("Nouveau has been blacklisted. Run 'sudo dracut -f' manually if needed.")
+                logger.info(
+                    "Nouveau has been blacklisted. Run 'sudo dracut -f' manually if needed."
+                )
             elif cmd[0] == "mkinitcpio":
-                logger.info("Nouveau has been blacklisted. Run 'sudo mkinitcpio -P' manually if needed.")
+                logger.info(
+                    "Nouveau has been blacklisted. Run 'sudo mkinitcpio -P' manually if needed."
+                )
             else:
-                logger.info("Nouveau has been blacklisted. Run 'sudo update-initramfs -u' manually if needed.")
+                logger.info(
+                    "Nouveau has been blacklisted. Run 'sudo update-initramfs -u' manually if needed."
+                )
             return False
 
         logger.info("Nouveau disabled. Reboot required.")
@@ -193,6 +211,7 @@ def install_driver(
     driver_version: str | None = None,
     with_cuda: bool = True,
     cuda_version: str | None = None,
+    pkg_manager=None,
 ) -> InstallResult:
     """Install Nvidia driver.
 
@@ -201,6 +220,7 @@ def install_driver(
         driver_version: Specific driver version (optional).
         with_cuda: Install CUDA packages.
         cuda_version: Specific CUDA version (optional).
+        pkg_manager: Package manager for version pinning.
 
     Returns:
         InstallResult with success status and message.
@@ -223,6 +243,11 @@ def install_driver(
             success=False,
             message=f"Installation failed: {e}",
         )
+
+    if driver_version and pkg_manager:
+        for pkg in driver_pkgs:
+            if pkg_manager.pin_version(pkg, driver_version):
+                logger.info(f"Pinned {pkg} to version {driver_version}")
 
     if with_cuda:
         cuda_pkgs = installer.get_cuda_packages(cuda_version)

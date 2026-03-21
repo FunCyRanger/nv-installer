@@ -108,32 +108,31 @@ class TestPreInstallCheck:
 
     def test_disk_space_warning(self):
         """Test disk space warning when low."""
+        mock_pm = MagicMock()
+        mock_pm.is_available.return_value = True
+        mock_pm.get_available_version.return_value = "1.0"
         with patch("os.statvfs") as mock_stat:
             mock_stat.return_value = MagicMock(f_bavail=100, f_frsize=1024)
-            with patch(
-                "nvidia_inst.installer.validation._check_packages_available",
-                return_value=True,
-            ), patch(
-                "nvidia_inst.installer.validation._check_kernel_devel",
-                return_value=True,
-            ), patch(
-                "nvidia_inst.installer.validation._check_secure_boot",
-                return_value=False,
-            ), patch.dict("os.environ", {"DISPLAY": ""}):
-                result = pre_install_check("fedora", ["akmod-nvidia"])
+            with (
+                patch(
+                    "nvidia_inst.installer.validation._check_secure_boot",
+                    return_value=False,
+                ),
+                patch.dict("os.environ", {"DISPLAY": ""}),
+            ):
+                result = pre_install_check("fedora", ["akmod-nvidia"], mock_pm)
 
             assert result.can_proceed is True
             assert any("Low disk space" in w for w in result.warnings)
 
     def test_packages_not_available(self):
         """Test error when packages not available."""
+        mock_pm = MagicMock()
+        mock_pm.is_available.return_value = True
+        mock_pm.get_available_version.return_value = None
         with patch("os.statvfs") as mock_stat:
             mock_stat.return_value = MagicMock(f_bavail=1000000, f_frsize=4096)
-            with patch(
-                "nvidia_inst.installer.validation._check_packages_available",
-                return_value=False,
-            ):
-                result = pre_install_check("fedora", ["akmod-nvidia"])
+            result = pre_install_check("fedora", ["akmod-nvidia"], mock_pm)
 
         assert result.can_proceed is False
         assert any("not available" in e for e in result.errors)

@@ -164,19 +164,25 @@ class TestValidationErrors:
         """Test validation when driver not loaded after install."""
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=1, stderr="No devices found")
+            mock_pm = MagicMock()
+            mock_pm.get_installed_version.return_value = None
             from nvidia_inst.installer.validation import post_install_validate
 
-            result = post_install_validate("ubuntu", ["nvidia-driver-535"])
+            result = post_install_validate("ubuntu", ["nvidia-driver-535"], mock_pm)
             assert result.success is False
 
     def test_nvidia_smi_fails_post_install(self):
-        """Test validation when nvidia-smi fails post-install."""
+        """Test validation when nvidia-smi fails post-install (needs reboot)."""
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = FileNotFoundError("nvidia-smi not found")
+            mock_pm = MagicMock()
+            mock_pm.get_installed_version.return_value = "535.154.05"
             from nvidia_inst.installer.validation import post_install_validate
 
-            result = post_install_validate("ubuntu", ["nvidia-driver-535"])
-            assert result.success is False
+            result = post_install_validate("ubuntu", ["nvidia-driver-535"], mock_pm)
+            assert result.success is True
+            assert result.nvidia_smi_works is False
+            assert any("reboot" in w.lower() for w in result.warnings)
 
 
 class TestDisableNouveauErrors:

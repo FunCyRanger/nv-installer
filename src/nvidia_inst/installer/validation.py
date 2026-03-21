@@ -4,6 +4,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from nvidia_inst.distro.package_manager import PackageManager
+
 
 @dataclass
 class SafetyCheckResult:
@@ -43,38 +45,34 @@ def unblock_nouveau() -> tuple[bool, str]:
         return False, str(e)
 
 
-def pre_install_check(distro_id: str, packages: list[str]) -> SafetyCheckResult:
+def pre_install_check(
+    distro_id: str,
+    packages: list[str],
+    pkg_manager: PackageManager,
+) -> SafetyCheckResult:
     """Run pre-installation safety checks."""
     result = SafetyCheckResult(can_proceed=True, warnings=[], errors=[])
 
-    # 1. Check disk space (500MB free in /var)
-    try:
-        stat = os.statvfs("/var")
-        free_mb = (stat.f_bavail * stat.f_frsize) / (1024 * 1024)
-        if free_mb < 500:
-            result.warnings.append(
-                f"Low disk space: {free_mb:.0f}MB free (500MB recommended)"
-            )
-    except Exception:
-        pass
+    if not pkg_manager.is_available():
+        result.errors.append("Package manager not available")
+        result.can_proceed = False
+        return result
 
-    # 2. Check package availability
-    available = _check_packages_available(distro_id, packages)
+    stat = os.statvfs("/var")
+    free_mb = (stat.f_bavail * stat.f_frsize) / (1024 * 1024)
+    if free_mb < 500:
+        result.warnings.append(
+            f"Low disk space: {free_mb:.0f}MB free (500MB recommended)"
+        )
+
+    available = all(pkg_manager.get_available_version(pkg) for pkg in packages)
     if not available:
         result.errors.append("Required packages not available in repos")
         result.can_proceed = False
 
-    # 3. Check kernel build deps
-    if not _check_kernel_devel():
-        result.warnings.append(
-            "Kernel development packages missing - akmod may fail to build"
-        )
-
-    # 4. Check Secure Boot
     if _check_secure_boot():
         result.warnings.append("Secure Boot is enabled - driver may need signing")
 
-    # 5. Check running environment
     if os.environ.get("DISPLAY"):
         result.warnings.append(
             "Running in graphical session - recommend running from tty or SSH"
@@ -84,7 +82,9 @@ def pre_install_check(distro_id: str, packages: list[str]) -> SafetyCheckResult:
 
 
 def post_install_validate(
-    distro_id: str, expected_packages: list[str]
+    distro_id: str,
+    expected_packages: list[str],
+    pkg_manager: PackageManager,
 ) -> ValidationResult:
     """Run post-installation validation."""
     result = ValidationResult(
@@ -99,26 +99,17 @@ def post_install_validate(
         errors=[],
     )
 
-    # 1. Check packages installed
-    try:
-        for pkg in expected_packages:
-            check = subprocess.run(
-                ["rpm", "-q", pkg],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            if check.returncode == 0:
-                result.installed_packages.append(pkg)
-            else:
-                result.missing_packages.append(pkg)
+    for pkg in expected_packages:
+        version = pkg_manager.get_installed_version(pkg)
+        if version:
+            result.installed_packages.append(pkg)
+        else:
+            result.missing_packages.append(pkg)
 
-        if result.missing_packages:
-            result.warnings.append(
-                f"Packages not installed: {', '.join(result.missing_packages)}"
-            )
-    except Exception as e:
-        result.errors.append(f"Could not verify packages: {e}")
+    if result.missing_packages:
+        result.warnings.append(
+            f"Packages not installed: {', '.join(result.missing_packages)}"
+        )
 
     # 2. Check akmod built kernel module
     try:
@@ -178,37 +169,6 @@ def post_install_validate(
 
     result.success = len(result.errors) == 0 and len(result.missing_packages) == 0
     return result
-
-
-def _check_packages_available(distro_id: str, packages: list[str]) -> bool:
-    """Check if packages are available in repos."""
-    try:
-        if distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
-            for pkg in packages:
-                check = subprocess.run(
-                    ["dnf", "repoquery", pkg],
-                    capture_output=True,
-                    timeout=30,
-                )
-                if check.returncode != 0:
-                    return False
-        return True
-    except Exception:
-        return False
-
-
-def _check_kernel_devel() -> bool:
-    """Check if kernel development packages are installed."""
-    try:
-        result = subprocess.run(
-            ["rpm", "-q", "kernel-devel"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        return result.returncode == 0 and "kernel-devel" in result.stdout
-    except Exception:
-        return False
 
 
 def _check_secure_boot() -> bool:

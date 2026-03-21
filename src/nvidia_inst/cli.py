@@ -563,7 +563,7 @@ def install_driver_cli(
 
         # Pre-installation safety check
         print("\nRunning safety checks...")
-        safety = pre_install_check(distro.id, packages)
+        safety = pre_install_check(distro.id, packages, pkg_manager)
 
         if not safety.can_proceed:
             print("\n[ERROR] Cannot proceed with installation:")
@@ -591,7 +591,7 @@ def install_driver_cli(
 
         # Post-installation validation
         print("Validating installation...")
-        validation = post_install_validate(distro.id, packages)
+        validation = post_install_validate(distro.id, packages, pkg_manager)
 
         # ALWAYS show success message
         logger.info("Driver installation completed")
