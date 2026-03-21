@@ -98,6 +98,72 @@ def _build_nothing_options(cuda_range, nvidia_open_available, nonfree_available)
 
 ---
 
+## Hybrid Graphics Support
+
+nvidia-inst supports hybrid graphics systems (Intel/AMD iGPU + NVIDIA dGPU) with automatic detection and power profile management.
+
+### Detection
+
+```python
+from nvidia_inst.gpu.hybrid import (
+    detect_hybrid,           # Full hybrid info
+    is_hybrid_system,        # Boolean check
+    detect_system_type,      # 'laptop' or 'desktop'
+    get_native_tool,         # Native tool per distro
+)
+
+hybrid_info = detect_hybrid(distro_id)
+if hybrid_info:
+    print(f"System: {hybrid_info.system_type}")
+    print(f"iGPU: {hybrid_info.igpu_type}")
+    print(f"dGPU: {hybrid_info.dgpu_model}")
+    print(f"Native Tool: {hybrid_info.native_tool}")
+```
+
+### Native Tools by Distro (Built-in First)
+
+| Distro | Native Tool | Packages | Power Profiles |
+|--------|-------------|----------|----------------|
+| Ubuntu/Debian | `nvidia-prime` | Included with driver | intel, on-demand, nvidia |
+| Fedora | `switcherooctl` | `switcheroo-control` | **intel, nvidia** |
+| Pop!_OS | `system76-power` | Built-in | integrated, hybrid, nvidia, compute |
+| openSUSE | `switcherooctl` | Built-in (Tumbleweed) | **intel, nvidia** |
+| CachyOS | `cachyos-settings` | Built-in | **intel, nvidia** |
+| Arch | PRIME env vars | None | hybrid, intel, nvidia |
+
+**Note**: `switcherooctl` does not support hybrid mode. Use DE's right-click menu
+("Launch using Dedicated GPU") for per-app GPU selection.
+
+### Power Profiles by Tool
+
+| Tool | Supported Modes |
+|------|----------------|
+| `nvidia-prime` | `intel`, `hybrid` (on-demand), `nvidia` |
+| `switcherooctl` | `intel`, `nvidia` (config file: `/etc/switcherooctl.conf`) |
+| `system76-power` | `integrated`, `hybrid`, `nvidia`, `compute` |
+| PRIME env vars | `hybrid` (default), `intel`, `nvidia` |
+
+### CLI Commands
+
+```bash
+nvidia-inst --show-hybrid-info       # Show hybrid detection results
+nvidia-inst --power-profile intel   # iGPU only
+nvidia-inst --power-profile hybrid  # iGPU + dGPU on-demand
+nvidia-inst --power-profile nvidia  # dGPU always
+```
+
+### Running Apps on dGPU
+
+```bash
+# With native tool (Ubuntu)
+prime-run <app>
+
+# With environment variables (all distros)
+__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia <app>
+```
+
+---
+
 ## Python Code Style
 
 ### Imports (PEP 8, sorted alphabetically)
@@ -185,11 +251,17 @@ src/nvidia_inst/
 ├── cli.py              # Main entry point
 ├── distro/             # Package manager abstraction (apt, dnf, pacman, zypper)
 ├── gpu/                # GPU detection and compatibility matrix
+│   ├── hybrid.py       # Hybrid graphics detection & management
+│   └── matrix/          # GPU compatibility matrix data
 ├── installer/          # Driver, CUDA installation, uninstaller
+│   └── hybrid.py       # Hybrid package installation & configuration
 ├── gui/                # Tkinter and Zenity implementations
 └── utils/logger.py     # Logging utilities
 
-tests/                  # pytest with pytest-mock
+tests/
+├── test_hybrid.py      # Hybrid graphics tests
+└── conftest.py         # Test fixtures
+
 scripts/                # install-*.sh, update-matrix.py
 ```
 

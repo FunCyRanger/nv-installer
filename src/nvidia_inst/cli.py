@@ -24,6 +24,10 @@ from nvidia_inst.gpu.detector import (
     detect_gpu,
     has_nvidia_gpu,
 )
+from nvidia_inst.gpu.hybrid import (
+    detect_hybrid,
+    get_native_tool,
+)
 from nvidia_inst.gpu.matrix.data import GPUGenerationInfo
 from nvidia_inst.installer.driver import (
     check_nonfree_available,
@@ -33,6 +37,12 @@ from nvidia_inst.installer.driver import (
     get_current_driver_type,
     get_nouveau_packages,
     get_nvidia_open_packages,
+)
+from nvidia_inst.installer.hybrid import (
+    get_hybrid_packages,
+    get_power_profile,
+    is_prime_env_configured,
+    set_power_profile,
 )
 from nvidia_inst.installer.prerequisites import PrerequisitesChecker
 from nvidia_inst.installer.secureboot import (
@@ -183,6 +193,18 @@ def parse_args() -> argparse.Namespace:
         "--matrix-info",
         action="store_true",
         help="Show compatibility matrix information",
+    )
+
+    parser.add_argument(
+        "--power-profile",
+        choices=["intel", "hybrid", "nvidia"],
+        help="Set hybrid graphics power profile",
+    )
+
+    parser.add_argument(
+        "--show-hybrid-info",
+        action="store_true",
+        help="Show hybrid graphics detection information",
     )
 
     return parser.parse_args()
@@ -1748,6 +1770,139 @@ def revert_to_nouveau_cli() -> int:
     return 0 if result.success else 1
 
 
+def show_hybrid_info_cli() -> int:
+    """Show hybrid graphics detection information.
+
+    Returns:
+        0 on success, 1 on failure.
+    """
+    try:
+        distro = detect_distro()
+    except DistroDetectionError:
+        print("[ERROR] Could not detect distribution")
+        return 1
+
+    hybrid_info = detect_hybrid(distro.id)
+
+    if not hybrid_info:
+        print("\nNo hybrid graphics detected.")
+        print("This system has only a single GPU configuration.")
+        return 0
+
+    native_tool, _, _ = get_native_tool(distro.id)
+
+    print("\n" + "=" * 50)
+    print("HYBRID GRAPHICS DETECTION")
+    print("=" * 50)
+
+    print(f"\nSystem Type: {hybrid_info.system_type.capitalize()}")
+    print(
+        f"Integrated GPU: {hybrid_info.igpu_type.upper() if hybrid_info.igpu_type else 'N/A'} ({hybrid_info.igpu_model})"
+    )
+    print(f"Discrete GPU: {hybrid_info.dgpu_model}")
+    print(f"NVIDIA GPUs: {hybrid_info.dgpu_count}")
+
+    print(f"\nNative Tool: {native_tool or 'None (using environment file)'}")
+
+    if hybrid_info.needs_install:
+        print("\n[NOTE] Service package needs to be installed for full functionality.")
+
+    if native_tool:
+        current_mode = get_power_profile(native_tool)
+        if current_mode:
+            print(f"Current Mode: {current_mode}")
+
+    print("\nAvailable Modes:")
+    for mode in hybrid_info.available_modes:
+        print(f"  - {mode}")
+
+    print(f"\nEnvironment File: {hybrid_info.env_file_path}")
+    print(f"PRIME Configured: {'Yes' if is_prime_env_configured() else 'No'}")
+
+    print("\n" + "=" * 50)
+    print("\nUsage:")
+    print("  --power-profile intel   Use integrated GPU only")
+    print("  --power-profile hybrid  iGPU + dGPU on-demand (recommended)")
+    print("  --power-profile nvidia Use dGPU always")
+
+    return 0
+
+
+def set_power_profile_cli(profile: str) -> int:
+    """Set hybrid graphics power profile.
+
+    Args:
+        profile: Power profile to set ('intel', 'hybrid', 'nvidia').
+
+    Returns:
+        0 on success, 1 on failure.
+    """
+    from nvidia_inst.utils.permissions import require_root
+
+    if not require_root(interactive=True):
+        print("\n[ERROR] Root privileges required to modify hybrid graphics settings.")
+        return 1
+    try:
+        distro = detect_distro()
+    except DistroDetectionError:
+        print("[ERROR] Could not detect distribution")
+        return 1
+
+    hybrid_info = detect_hybrid(distro.id)
+
+    if not hybrid_info:
+        print("[ERROR] No hybrid graphics detected on this system")
+        return 1
+
+    native_tool, _, needs_install = get_native_tool(distro.id)
+
+    print(f"\nSetting power profile to: {profile}")
+
+    if profile == "hybrid":
+        if native_tool == "switcherooctl":
+            print("\n[ERROR] 'hybrid' mode is not supported with switcherooctl.")
+            print("switcherooctl supports: intel, nvidia")
+            print("For per-app GPU selection, use your desktop environment's")
+            print("right-click menu: 'Launch using Dedicated GPU'")
+            return 1
+
+        if needs_install and hybrid_info.needs_install:
+            packages = get_hybrid_packages(distro.id)
+            if packages:
+                pm = get_package_manager()
+                print(f"\nInstalling hybrid support packages: {', '.join(packages)}")
+                try:
+                    pm.install(packages)
+                except Exception as e:
+                    print(f"[WARNING] Failed to install hybrid packages: {e}")
+
+        if not set_power_profile(profile, native_tool, distro.id):
+            print(f"[ERROR] Failed to set power profile to {profile}")
+            return 1
+
+        print("\n[OK] Power-saving hybrid mode configured.")
+        print("The NVIDIA GPU will be used only when needed.")
+
+    else:
+        if not native_tool:
+            print("[ERROR] Native tool not available for this profile")
+            if profile in ("intel", "nvidia"):
+                print(
+                    "Try running without specifying a profile to see available options"
+                )
+            return 1
+
+        if not set_power_profile(profile, native_tool, distro.id):
+            print(f"[ERROR] Failed to set power profile to {profile}")
+            return 1
+
+        print(f"\n[OK] Power profile set to: {profile}")
+
+    print("\nNote: You may need to log out and log back in for changes to take effect.")
+
+    return 0
+
+
 def main() -> int:
     """Main entry point."""
     from nvidia_inst.utils.permissions import require_root
@@ -1766,6 +1921,12 @@ def main() -> int:
 
     if args.matrix_info:
         return show_matrix_info()
+
+    if args.show_hybrid_info:
+        return show_hybrid_info_cli()
+
+    if args.power_profile:
+        return set_power_profile_cli(args.power_profile)
 
     if args.update_matrix:
         return update_matrix_cli()
