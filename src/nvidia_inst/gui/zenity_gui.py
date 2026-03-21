@@ -2,9 +2,15 @@
 
 import subprocess
 
-from nvidia_inst.cli import install_driver_cli
+from nvidia_inst.cli import (
+    DriverOption,
+    DriverState,
+    detect_driver_state,
+    execute_driver_change,
+    get_driver_range,
+    install_driver_cli,
+)
 from nvidia_inst.distro.detector import DistroDetectionError, detect_distro
-from nvidia_inst.gpu.compatibility import get_driver_range
 from nvidia_inst.gpu.detector import detect_gpu, has_nvidia_gpu
 from nvidia_inst.utils.logger import get_logger
 from nvidia_inst.utils.permissions import require_root
@@ -143,8 +149,7 @@ Driver: {driver_range.min_version}"""
         info_text += f" - {driver_range.max_version}"
 
     info_text += f"""
-
-CUDA: {driver_range.cuda_min}"""
+    CUDA: {driver_range.cuda_min}"""
     if driver_range.cuda_max:
         info_text += f" - {driver_range.cuda_max}"
 
@@ -156,13 +161,99 @@ CUDA: {driver_range.cuda_min}"""
     if driver_range.is_eol:
         zenity_warning("EOL GPU", f"{driver_range.eol_message}\n\nContinue anyway?")
 
-    confirmed = zenity_question(
-        "Install Driver",
-        f"Install Nvidia driver?\n\nGPU: {gpu.model}",
-    )
+    # Detect driver state and get available options
+    state = detect_driver_state(gpu, driver_range, distro.id)
 
-    if not confirmed:
+    # Show options to user
+    selected_option = zenity_show_options(state)
+    if selected_option is None:  # User cancelled
         return 0
+
+    if not require_root(interactive=True):
+        zenity_error("Error", "Root privileges required for driver operations")
+        return 1
+
+    # Execute the selected option
+    try:
+        result = execute_driver_change(
+            selected_option, state, distro, gpu, driver_range, dry_run=False
+        )
+
+        if result == 0:
+            zenity_info(
+                "Success",
+                "Operation completed successfully!\nPlease reboot your system if required.",
+            )
+        else:
+            zenity_error("Error", "Operation failed")
+        return result
+
+    except Exception as e:
+        zenity_error("Error", f"Operation failed: {e}")
+        return 1
+
+
+def zenity_show_options(state: DriverState) -> DriverOption | None:
+    """Show driver options using zenity dialog.
+
+    Args:
+        state: Current driver state with available options.
+
+    Returns:
+        Selected DriverOption or None if cancelled.
+    """
+    # Prepare options for zenity list
+    options_text = []
+    for opt in state.options:
+        option_line = f"{opt.number}. {opt.description}"
+        if opt.recommended:
+            option_line += " [RECOMMENDED]"
+        options_text.append(option_line)
+
+    # Join options with newline for zenity --list
+    options_data = "\n".join(options_text)
+
+    # Show zenity list dialog
+    try:
+        result = subprocess.run(
+            [
+                "zenity",
+                "--list",
+                "--title=Driver Management Options",
+                f"--text={state.message}",
+                "--column=Option",
+                "--width=500",
+                "--height=400",
+                "--radiolist",
+                "--hide-column=2",  # Hide the number column, we'll parse it differently
+                "--print-column=2",  # Print the description column
+            ],
+            input=options_data,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if result.returncode != 0:
+            # User cancelled or error
+            return None
+
+        selected_description = result.stdout.strip()
+        if not selected_description:
+            return None
+
+        # Find the option matching the selected description
+        for opt in state.options:
+            desc = opt.description
+            if opt.recommended:
+                desc += " [RECOMMENDED]"
+            if desc == selected_description:
+                return opt
+
+        return None  # Should not happen
+
+    except Exception:
+        return None
 
     if not require_root(interactive=True):
         zenity_error("Error", "Root privileges required to install drivers")
