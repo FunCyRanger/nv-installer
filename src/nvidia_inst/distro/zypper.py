@@ -44,6 +44,11 @@ class ZypperManager(PackageManager):
 
     def install(self, packages: list[str]) -> bool:
         """Install packages using zypper."""
+        from nvidia_inst.utils.permissions import is_root
+
+        if not is_root():
+            raise PermissionError("Root privileges required to install packages")
+
         try:
             cmd = [self._zypper_path, "install", "-y"] + packages
             subprocess.run(cmd, check=True, capture_output=True)
@@ -57,6 +62,12 @@ class ZypperManager(PackageManager):
 
     def remove(self, packages: list[str]) -> bool:
         """Remove packages using zypper."""
+        from nvidia_inst.utils.permissions import is_root
+
+        if not is_root():
+            logger.error("Root privileges required to remove packages")
+            return False
+
         try:
             cmd = [self._zypper_path, "remove", "-y"] + packages
             subprocess.run(cmd, check=True, capture_output=True)

@@ -62,12 +62,14 @@ class TestDnfManager:
         result = dnf_manager.upgrade()
         assert result is False
 
-    def test_install_success(self, dnf_manager, mock_subprocess_popen):
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
+    def test_install_success(self, mock_root, dnf_manager, mock_subprocess_popen):
         """Test successful package installation via Popen."""
         result = dnf_manager.install(["akmod-nvidia", "xorg-x11-drv-nvidia"])
         assert result is True
 
-    def test_install_failure(self, dnf_manager, mock_subprocess_popen):
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
+    def test_install_failure(self, mock_root, dnf_manager, mock_subprocess_popen):
         """Test package installation failure."""
         mock_proc = MagicMock()
         mock_proc.poll.return_value = 0
@@ -79,14 +81,16 @@ class TestDnfManager:
         with pytest.raises(PackageManagerError):
             dnf_manager.install(["nonexistent-package"])
 
-    def test_install_exception(self, dnf_manager, mock_subprocess_popen):
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
+    def test_install_exception(self, mock_root, dnf_manager, mock_subprocess_popen):
         """Test package installation with exception."""
         mock_subprocess_popen.side_effect = OSError("Failed to start")
 
         with pytest.raises(PackageManagerError):
             dnf_manager.install(["nvidia-driver"])
 
-    def test_remove_success(self, dnf_manager, mock_subprocess_run):
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
+    def test_remove_success(self, mock_root, dnf_manager, mock_subprocess_run):
         """Test successful package removal."""
         result = dnf_manager.remove(["akmod-nvidia"])
         assert result is True
@@ -258,8 +262,9 @@ class TestDnfManager:
 class TestDnfManagerIntegration:
     """Integration-style tests for DNF manager."""
 
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
     def test_full_install_workflow(
-        self, mock_subprocess_run, mock_subprocess_popen, mock_shutil_which
+        self, mock_root, mock_subprocess_run, mock_subprocess_popen, mock_shutil_which
     ):
         """Test full install workflow."""
         mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -277,8 +282,9 @@ class TestDnfManagerIntegration:
         assert dnf.update() is True
         assert dnf.install(["akmod-nvidia", "xorg-x11-drv-nvidia"]) is True
 
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
     def test_search_and_install_workflow(
-        self, mock_subprocess_run, mock_subprocess_popen
+        self, mock_root, mock_subprocess_run, mock_subprocess_popen
     ):
         """Test search then install workflow."""
         mock_subprocess_run.return_value = MagicMock(

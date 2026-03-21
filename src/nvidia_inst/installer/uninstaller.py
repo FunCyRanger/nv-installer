@@ -36,6 +36,8 @@ def revert_to_nouveau(distro_id: str) -> RevertResult:
     Returns:
         RevertResult with success status and details.
     """
+    from nvidia_inst.utils.permissions import is_root
+
     result = RevertResult(
         success=False,
         packages_removed=[],
@@ -44,6 +46,11 @@ def revert_to_nouveau(distro_id: str) -> RevertResult:
         errors=[],
         message="",
     )
+
+    if not is_root():
+        result.errors.append("Root privileges required")
+        result.message = "Root privileges required. Run with sudo."
+        return result
 
     if distro_id not in (
         "ubuntu",

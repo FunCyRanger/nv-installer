@@ -62,7 +62,8 @@ class TestPacmanManager:
         result = pacman_manager.upgrade()
         assert result is False
 
-    def test_install_success(self, pacman_manager, mock_subprocess_run):
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
+    def test_install_success(self, mock_root, pacman_manager, mock_subprocess_run):
         """Test successful package installation."""
         result = pacman_manager.install(["nvidia-open", "nvidia-utils"])
         assert result is True
@@ -70,7 +71,8 @@ class TestPacmanManager:
         assert "nvidia-open" in call_args
         assert "--noconfirm" in call_args
 
-    def test_install_failure(self, pacman_manager, mock_subprocess_run):
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
+    def test_install_failure(self, mock_root, pacman_manager, mock_subprocess_run):
         """Test package installation failure."""
         mock_subprocess_run.side_effect = subprocess.CalledProcessError(
             1, "pacman -S", stderr="Package not found"
@@ -79,7 +81,8 @@ class TestPacmanManager:
             pacman_manager.install(["nonexistent-package"])
         assert "nonexistent-package" in str(exc_info.value)
 
-    def test_remove_success(self, pacman_manager, mock_subprocess_run):
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
+    def test_remove_success(self, mock_root, pacman_manager, mock_subprocess_run):
         """Test successful package removal."""
         result = pacman_manager.remove(["nvidia-open"])
         assert result is True
@@ -246,7 +249,10 @@ class TestPacmanManagerBranches:
 class TestPacmanManagerIntegration:
     """Integration-style tests for Pacman manager."""
 
-    def test_full_install_workflow(self, mock_subprocess_run, mock_shutil_which):
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
+    def test_full_install_workflow(
+        self, mock_root, mock_subprocess_run, mock_shutil_which
+    ):
         """Test full install workflow."""
         mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         mock_shutil_which.return_value = "/usr/bin/pacman"
@@ -257,7 +263,8 @@ class TestPacmanManagerIntegration:
         assert pacman.update() is True
         assert pacman.install(["nvidia-open", "nvidia-utils"]) is True
 
-    def test_search_and_install_workflow(self, mock_subprocess_run):
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
+    def test_search_and_install_workflow(self, mock_root, mock_subprocess_run):
         """Test search then install workflow."""
         outputs = [
             MagicMock(returncode=0, stdout="extra/nvidia 535.154.05", stderr=""),

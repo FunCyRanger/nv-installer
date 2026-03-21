@@ -318,3 +318,9 @@ def mock_secure_boot_disabled(monkeypatch):
     from nvidia_inst.installer import driver
 
     monkeypatch.setattr(f"{driver.__name__}.check_secure_boot", lambda: False)
+
+
+@pytest.fixture
+def mock_is_root(monkeypatch):
+    """Mock is_root to return True in all relevant modules."""
+    monkeypatch.setattr("nvidia_inst.utils.permissions.is_root", lambda: True)

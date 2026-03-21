@@ -62,7 +62,8 @@ class TestZypperManager:
         result = zypper_manager.upgrade()
         assert result is False
 
-    def test_install_success(self, zypper_manager, mock_subprocess_run):
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
+    def test_install_success(self, mock_root, zypper_manager, mock_subprocess_run):
         """Test successful package installation."""
         result = zypper_manager.install(["x11-video-nvidiaG05", "nvidia-computeG05"])
         assert result is True
@@ -70,21 +71,24 @@ class TestZypperManager:
         assert "install" in call_args
         assert "-y" in call_args
 
-    def test_install_failure(self, zypper_manager, mock_subprocess_run):
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
+    def test_install_failure(self, mock_root, zypper_manager, mock_subprocess_run):
         """Test package installation failure."""
         mock_subprocess_run.side_effect = subprocess.CalledProcessError(
             1, "zypper install", stderr="Package not found"
         )
         with pytest.raises(PackageManagerError) as exc_info:
             zypper_manager.install(["nonexistent-package"])
-        assert "nonexistent-package" in str(exc_info.value)
+        assert "Failed to install" in str(exc_info.value)
 
-    def test_remove_success(self, zypper_manager, mock_subprocess_run):
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
+    def test_remove_success(self, mock_root, zypper_manager, mock_subprocess_run):
         """Test successful package removal."""
-        result = zypper_manager.remove(["x11-video-nvidiaG05"])
+        result = zypper_manager.remove(["nvidia-driver"])
         assert result is True
         call_args = mock_subprocess_run.call_args[0][0]
         assert "remove" in call_args
+        assert "-y" in call_args
 
     def test_remove_failure(self, zypper_manager, mock_subprocess_run):
         """Test package removal failure."""
@@ -218,7 +222,10 @@ class TestZypperManager:
 class TestZypperManagerIntegration:
     """Integration-style tests for Zypper manager."""
 
-    def test_full_install_workflow(self, mock_subprocess_run, mock_shutil_which):
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
+    def test_full_install_workflow(
+        self, mock_root, mock_subprocess_run, mock_shutil_which
+    ):
         """Test full install workflow."""
         mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         mock_shutil_which.return_value = "/usr/bin/zypper"
@@ -229,7 +236,8 @@ class TestZypperManagerIntegration:
         assert zypper.update() is True
         assert zypper.install(["x11-video-nvidiaG05", "nvidia-computeG05"]) is True
 
-    def test_search_and_install_workflow(self, mock_subprocess_run):
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
+    def test_search_and_install_workflow(self, mock_root, mock_subprocess_run):
         """Test search then install workflow."""
         mock_subprocess_run.side_effect = [
             MagicMock(

@@ -882,6 +882,12 @@ def execute_driver_change(
             _dry_run_revert(distro)
             return 0
 
+        from nvidia_inst.utils.permissions import require_root
+
+        if not require_root(interactive=True):
+            print("\n[ERROR] Root privileges required to remove drivers.")
+            return 1
+
         print("\n[WARNING] This will remove NVIDIA proprietary driver.")
         response = input("Continue? [y/N]: ")
         if response.lower() not in ("y", "yes"):
@@ -906,6 +912,12 @@ def execute_driver_change(
         if dry_run:
             _dry_run_change(state, packages, distro)
             return 0
+
+        from nvidia_inst.utils.permissions import require_root
+
+        if not require_root(interactive=True):
+            print("\n[ERROR] Root privileges required to install drivers.")
+            return 1
 
         driver_type = get_current_driver_type()
         if driver_type == "nouveau":
@@ -1320,6 +1332,8 @@ def revert_to_nouveau_cli() -> int:
 
 def main() -> int:
     """Main entry point."""
+    from nvidia_inst.utils.permissions import require_root
+
     args = parse_args()
 
     setup_logging(debug=args.debug, dry_run=args.dry_run)
@@ -1339,6 +1353,9 @@ def main() -> int:
         return update_matrix_cli()
 
     if args.revert_to_nouveau:
+        if not args.dry_run and not require_root(interactive=True):
+            print("\n[ERROR] Root privileges required to modify drivers.")
+            return 1
         return revert_to_nouveau_cli()
 
     if args.gui or args.gui_type:
@@ -1348,6 +1365,10 @@ def main() -> int:
 
     if args.check:
         return check_compatibility()
+
+    if not args.dry_run and not require_root(interactive=True):
+        print("\n[ERROR] Root privileges required to modify drivers.")
+        return 1
 
     return install_driver_cli(
         driver_version=args.driver_version,

@@ -54,7 +54,8 @@ class TestAptManager:
         result = apt_manager.upgrade()
         assert result is False
 
-    def test_install_success(self, apt_manager, mock_subprocess_run):
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
+    def test_install_success(self, mock_root, apt_manager, mock_subprocess_run):
         """Test successful package installation."""
         result = apt_manager.install(["nvidia-driver-535"])
         assert result is True
@@ -62,7 +63,8 @@ class TestAptManager:
         call_args = mock_subprocess_run.call_args[0][0]
         assert "nvidia-driver-535" in call_args
 
-    def test_install_failure(self, apt_manager, mock_subprocess_run):
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
+    def test_install_failure(self, mock_root, apt_manager, mock_subprocess_run):
         """Test package installation failure."""
         mock_subprocess_run.side_effect = subprocess.CalledProcessError(
             1, "apt install", stderr="Package not found"
@@ -71,7 +73,8 @@ class TestAptManager:
             apt_manager.install(["nonexistent-package"])
         assert "nonexistent-package" in str(exc_info.value)
 
-    def test_remove_success(self, apt_manager, mock_subprocess_run):
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
+    def test_remove_success(self, mock_root, apt_manager, mock_subprocess_run):
         """Test successful package removal."""
         result = apt_manager.remove(["nvidia-driver-535"])
         assert result is True
@@ -226,7 +229,10 @@ class TestAptManager:
 class TestAptManagerIntegration:
     """Integration-style tests for APT manager with real mock objects."""
 
-    def test_full_install_workflow(self, mock_subprocess_run, mock_shutil_which):
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
+    def test_full_install_workflow(
+        self, mock_root, mock_subprocess_run, mock_shutil_which
+    ):
         """Test full install workflow."""
         mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         mock_shutil_which.return_value = "/usr/bin/apt"
@@ -237,8 +243,9 @@ class TestAptManagerIntegration:
         assert apt.update() is True
         assert apt.install(["nvidia-driver-535", "nvidia-dkms-535"]) is True
 
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=True)
     def test_full_search_to_install_workflow(
-        self, mock_subprocess_run, apt_package_search_output
+        self, mock_root, mock_subprocess_run, apt_package_search_output
     ):
         """Test search then install workflow."""
         mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")

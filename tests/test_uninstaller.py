@@ -53,11 +53,17 @@ class TestGetPackagesToRemove:
 class TestRevertToNouveau:
     """Test revert_to_nouveau function."""
 
-    def test_unsupported_distro(self):
+    def test_unsupported_distro(self, mock_is_root):
         """Test revert fails on unsupported distribution."""
         result = revert_to_nouveau("unknown")
         assert result.success is False
         assert "Unsupported distribution" in result.errors[0]
+
+    def test_requires_root(self):
+        """Test revert fails when not running as root."""
+        result = revert_to_nouveau("ubuntu")
+        assert result.success is False
+        assert "Root privileges required" in result.errors[0]
 
     @patch("nvidia_inst.installer.uninstaller._remove_packages")
     @patch("nvidia_inst.installer.uninstaller._rebuild_initramfs")
@@ -81,7 +87,13 @@ class TestRevertToNouveau:
     @patch("nvidia_inst.installer.uninstaller._get_packages_to_remove")
     @patch("nvidia_inst.installer.uninstaller._remove_packages")
     def test_successful_revert(
-        self, mock_remove_pkgs, mock_get_pkgs, mock_rebuild, mock_remove_bl, mock_run
+        self,
+        mock_remove_pkgs,
+        mock_get_pkgs,
+        mock_rebuild,
+        mock_remove_bl,
+        mock_run,
+        mock_is_root,
     ):
         """Test successful revert to Nouveau."""
         mock_get_pkgs.return_value = ["nvidia-driver-535"]
