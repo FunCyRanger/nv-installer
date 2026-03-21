@@ -469,11 +469,10 @@ def _build_wrong_branch_options(
         )
         options.append(DriverOption(3, open_desc, "switch_nvidia_open"))
 
-    nouveau_suffix = cuda_suffix if cuda_range else ""
     options.append(
         DriverOption(
             len(options) + 1,
-            f"Switch to Nouveau (open-source){nouveau_suffix}",
+            "Switch to Nouveau (open-source, no CUDA support)",
             "switch_nouveau",
         )
     )
@@ -620,11 +619,10 @@ def _build_nothing_options(
                 )
             )
 
-    nouveau_suffix = cuda_suffix if cuda_range else " (no CUDA)"
     options.append(
         DriverOption(
             len(options) + 1,
-            f"Install Nouveau (open-source){nouveau_suffix}",
+            "Install Nouveau (open-source, no CUDA support)",
             "install_nouveau",
         )
     )
