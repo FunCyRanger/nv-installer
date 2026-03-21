@@ -178,16 +178,18 @@ class TestGetNativeTool:
 
     def test_fedora(self):
         """Test Fedora detection."""
-        with patch("nvidia_inst.gpu.hybrid._command_exists") as mock_cmd:
-            with patch("nvidia_inst.gpu.hybrid.is_service_installed") as mock_service:
-                mock_cmd.return_value = True
-                mock_service.return_value = True
+        with (
+            patch("nvidia_inst.gpu.hybrid._command_exists") as mock_cmd,
+            patch("nvidia_inst.gpu.hybrid.is_service_installed") as mock_service,
+        ):
+            mock_cmd.return_value = True
+            mock_service.return_value = True
 
-                from nvidia_inst.gpu.hybrid import get_native_tool
+            from nvidia_inst.gpu.hybrid import get_native_tool
 
-                tool, method, needs_install = get_native_tool("fedora")
-                assert tool == "switcherooctl"
-                assert needs_install is False
+            tool, method, needs_install = get_native_tool("fedora")
+            assert tool == "switcherooctl"
+            assert needs_install is False
 
     def test_arch_no_tool(self):
         """Test Arch with no native tool."""

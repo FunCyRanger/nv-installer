@@ -1,5 +1,6 @@
 """Tests for kmod-only setup detection and handling."""
 
+from contextlib import suppress
 from unittest.mock import MagicMock, patch
 
 from nvidia_inst.installer.uninstaller import _get_packages_to_remove
@@ -314,8 +315,6 @@ class TestKernelUpdateWorkflow:
 
     def test_dracut_command_pattern(self):
         """Test dracut command pattern for initramfs rebuild."""
-        import subprocess
-
         cmd = ["dracut", "--force"]
         assert "--force" in cmd
         assert cmd[0] == "dracut"
@@ -327,10 +326,8 @@ class TestKernelUpdateWorkflow:
 
         import subprocess
 
-        try:
+        with suppress(KeyboardInterrupt):
             subprocess.run(["reboot"], check=True)
-        except KeyboardInterrupt:
-            pass
 
         mock_run.assert_called_with(["reboot"], check=True)
 
