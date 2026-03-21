@@ -376,6 +376,19 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 See [LICENSE](LICENSE) file for full license text.
 
+## Trademarks
+
+NVIDIA, CUDA, GeForce, RTX, and related marks are trademarks of NVIDIA Corporation. This project is not affiliated with, endorsed by, or sponsored by NVIDIA Corporation.
+
+## Third-Party Repositories
+
+This project uses distribution package repositories to install drivers:
+
+- **RPM Fusion** (Fedora/RHEL): Community-maintained repository, not affiliated with NVIDIA Corporation
+- **Ubuntu Graphics Drivers PPA**: Community-maintained, not affiliated with NVIDIA Corporation
+- **Arch Linux Extra**: Official community repository, not affiliated with NVIDIA Corporation
+- **openSUSE NVIDIA Repository**: Provided by NVIDIA for openSUSE users
+
 ## Credits
 
 - Nvidia Driver Compatibility Matrix: https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/
