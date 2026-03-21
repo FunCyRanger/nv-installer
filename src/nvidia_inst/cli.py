@@ -10,7 +10,11 @@ from nvidia_inst.distro.detector import (
     detect_distro,
 )
 from nvidia_inst.distro.factory import get_package_manager
-from nvidia_inst.gpu.compatibility import DriverRange, get_driver_range
+from nvidia_inst.gpu.compatibility import (
+    DriverRange,
+    get_driver_range,
+    is_driver_compatible,
+)
 from nvidia_inst.gpu.detector import (
     GPUDetectionError,
     GPUInfo,
@@ -186,6 +190,16 @@ def check_compatibility() -> int:
         print(
             f"\n[OK] NVIDIA driver is working (version {working_check.driver_version})"
         )
+        if working_check.driver_version and not is_driver_compatible(
+            working_check.driver_version, gpu
+        ):
+            print(
+                f"[WARNING] Installed driver {working_check.driver_version} may not be optimal for {gpu.model}"
+            )
+            print(
+                f"  Recommended: {driver_range.min_version} - {driver_range.max_version or 'latest'}"
+            )
+            print("  → Re-run this script to install the correct driver")
     elif working_check.gpu_detected:
         print("\n[INFO] NVIDIA GPU detected but driver not loaded")
     else:
@@ -523,7 +537,18 @@ def install_driver_cli(
         print(
             f"\n[INFO] NVIDIA driver is already working (version {working_check.driver_version})"
         )
-        print("Proceeding will upgrade to the latest compatible driver.")
+        driver_incompatible = working_check.driver_version and not is_driver_compatible(
+            working_check.driver_version, gpu
+        )
+        if driver_incompatible:
+            print(f"[WARNING] Installed driver may not be optimal for {gpu.model}")
+            print(
+                f"  Recommended: {driver_range.min_version} - {driver_range.max_version or 'latest'}"
+            )
+            print("  → Re-running this script will install the correct driver")
+            print("Proceeding will install the correct driver branch.")
+        else:
+            print("Proceeding will upgrade to the latest compatible driver.")
         if not skip_confirmation:
             response = input("\nSkip installation? [Y/n]: ")
             if response.lower() not in ("n", "no"):
