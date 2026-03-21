@@ -104,10 +104,10 @@ class DistroInstaller(ABC):
 
 
 def check_nouveau() -> bool:
-    """Check if Nouveau kernel module is loaded.
+    """Check if Nouveau kernel module is loaded or nouveau packages installed.
 
     Returns:
-        True if Nouveau is loaded, False otherwise.
+        True if Nouveau is detected, False otherwise.
     """
     try:
         result = subprocess.run(
@@ -116,9 +116,149 @@ def check_nouveau() -> bool:
             text=True,
             check=True,
         )
-        return "nouveau" in result.stdout
+        if "nouveau" in result.stdout:
+            return True
     except subprocess.CalledProcessError:
+        pass
+
+    return _check_nouveau_packages()
+
+
+def _check_nouveau_packages() -> bool:
+    """Check for nouveau-related packages on the system.
+
+    Returns:
+        True if nouveau packages are installed, False otherwise.
+    """
+    nouveau_pkgs = {
+        "ubuntu": ["xserver-xorg-video-nouveau"],
+        "debian": ["xserver-xorg-video-nouveau"],
+        "fedora": ["xorg-x11-drv-nouveau"],
+        "centos": ["xorg-x11-drv-nouveau"],
+        "rhel": ["xorg-x11-drv-nouveau"],
+        "rocky": ["xorg-x11-drv-nouveau"],
+        "alma": ["xorg-x11-drv-nouveau"],
+        "arch": ["xf86-video-nouveau"],
+        "manjaro": ["xf86-video-nouveau"],
+        "opensuse": ["xf86-video-nouveau"],
+        "sles": ["xf86-video-nouveau"],
+    }
+
+    from nvidia_inst.distro.detector import detect_distro
+
+    distro = detect_distro()
+    distro_id = distro.id
+    packages = nouveau_pkgs.get(distro_id, [])
+
+    if not packages:
         return False
+
+    try:
+        if distro_id in ("ubuntu", "debian", "linuxmint", "pop"):
+            result = subprocess.run(
+                ["dpkg", "-l"] + packages,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                for line in result.stdout.splitlines():
+                    parts = line.split()
+                    if len(parts) >= 2 and parts[0] == "ii":
+                        return True
+        elif distro_id in ("fedora", "centos", "rhel", "rocky", "alma"):
+            result = subprocess.run(
+                ["rpm", "-q"] + packages,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                return True
+        elif distro_id in ("arch", "manjaro", "opensuse", "sles"):
+            result = subprocess.run(
+                ["pacman", "-Q"] + packages,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                return True
+    except Exception:
+        pass
+
+    return False
+
+
+def check_nonfree_available() -> bool:
+    """Check if proprietary (nonfree) driver is available in repos.
+
+    Returns:
+        True if nonfree driver packages are available, False otherwise.
+    """
+    from nvidia_inst.distro.detector import detect_distro
+
+    distro = detect_distro()
+    distro_id = distro.id
+
+    if distro_id in ("ubuntu", "debian", "linuxmint", "pop"):
+        return _check_apt_nonfree()
+    elif distro_id in ("fedora", "centos", "rhel", "rocky", "alma"):
+        return _check_dnf_nonfree()
+    elif distro_id in ("arch", "manjaro"):
+        return _check_pacman_nvidia()
+    elif distro_id in ("opensuse", "sles"):
+        return True
+
+    return False
+
+
+def _check_apt_nonfree() -> bool:
+    """Check if non-free repository is enabled for APT."""
+    try:
+        result = subprocess.run(
+            ["apt-cache", "policy", "nvidia-driver-535"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                if "nvidia-driver-535" in line and "500%3a" not in line:
+                    return True
+    except Exception:
+        pass
+    return False
+
+
+def _check_dnf_nonfree() -> bool:
+    """Check if RPMFusion nonfree is enabled for DNF."""
+    try:
+        result = subprocess.run(
+            ["dnf", "repolist", "enabled"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            repos = result.stdout.lower()
+            return "rpmfusion-nonfree" in repos
+    except Exception:
+        pass
+    return False
+
+
+def _check_pacman_nvidia() -> bool:
+    """Check if nvidia packages are available in pacman."""
+    try:
+        result = subprocess.run(
+            ["pacman", "-Ss", "nvidia"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            return "nvidia" in result.stdout.lower()
+    except Exception:
+        pass
+    return False
 
 
 def check_secure_boot() -> bool:

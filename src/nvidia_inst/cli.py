@@ -361,19 +361,37 @@ def detect_driver_state(
         )
 
     else:
+        from nvidia_inst.installer.driver import check_nonfree_available
+
         suggested = get_compatible_driver_packages(distro_id, driver_range)
-        return DriverState(
-            status=DriverStatus.NOTHING,
-            current_version=None,
-            is_compatible=False,
-            is_optimal=False,
-            suggested_packages=suggested,
-            options=[
-                DriverOption(1, "Install driver", "install", recommended=True),
-                DriverOption(2, "Cancel", "cancel"),
-            ],
-            message="No NVIDIA driver installed",
-        )
+        nonfree_available = check_nonfree_available()
+
+        if nonfree_available:
+            return DriverState(
+                status=DriverStatus.NOTHING,
+                current_version=None,
+                is_compatible=False,
+                is_optimal=False,
+                suggested_packages=suggested,
+                options=[
+                    DriverOption(1, "Install driver", "install", recommended=True),
+                    DriverOption(2, "Cancel", "cancel"),
+                ],
+                message="No NVIDIA driver installed",
+            )
+        else:
+            return DriverState(
+                status=DriverStatus.NOTHING,
+                current_version=None,
+                is_compatible=False,
+                is_optimal=False,
+                suggested_packages=suggested,
+                options=[
+                    DriverOption(1, "Enable non-free repos and install driver", "install", recommended=True),
+                    DriverOption(2, "Cancel", "cancel"),
+                ],
+                message="No NVIDIA driver installed (non-free repos not enabled)",
+            )
 
 
 def show_driver_options(state: DriverState) -> int:

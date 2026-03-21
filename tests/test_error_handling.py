@@ -56,13 +56,15 @@ class TestNouveauLoaded:
             )
             assert check_nouveau() is True
 
-    def test_nouveau_not_loaded(self):
+    @patch("nvidia_inst.installer.driver._check_nouveau_packages")
+    def test_nouveau_not_loaded(self, mock_pkgs):
         """Test Nouveau not loaded."""
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0,
                 stdout="Module                  Size  Used by\n",
             )
+            mock_pkgs.return_value = False
             assert check_nouveau() is False
 
 
