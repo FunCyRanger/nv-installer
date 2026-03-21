@@ -445,6 +445,130 @@ sudo reboot
 sudo nvidia-inst --revert-to-nouveau
 ```
 
+### Slow Boot - akmods.service Takes Minutes (Fedora/RHEL)
+
+If boot time is slow and `systemd-analyze critical-chain` shows akmods.service
+taking several minutes, check for these common causes:
+
+#### Cause: Missing /var/lib/akmods/ directory
+
+Akmods uses this directory to track which modules have been built. If missing,
+it rebuilds every boot even when kmod-nvidia is installed:
+
+```bash
+# Check if directory exists
+ls -la /var/lib/akmods/
+
+# If missing, create it
+sudo mkdir -p /var/lib/akmods
+sudo chown root:akmods /var/lib/akmods
+sudo chmod 0755 /var/lib/akmods
+```
+
+After creating this directory, akmods should detect existing kmod-nvidia
+packages and skip rebuilding on subsequent boots.
+
+#### Cause: Rebooting too quickly after kernel update
+
+Akmods builds in the background after dnf update. Rebooting before completion
+forces a rebuild at next boot:
+
+```bash
+# After kernel update, wait 5-10 minutes OR run manually:
+sudo akmods --force
+sudo reboot
+```
+
+#### Cause: Build failure not detected
+
+If akmods failed silently, it retries every boot:
+
+```bash
+# Check for failed builds
+cat /var/cache/akmods/nvidia/*.failed.log 2>/dev/null
+
+# Force rebuild
+sudo akmods --force
+```
+
+## Fast Boot Options for Fedora/RHEL
+
+There are three approaches to avoid slow boot times with NVIDIA drivers:
+
+### Option A: Fix akmods (Recommended)
+
+If akmods.service runs at every boot, the most common cause is a missing
+`/var/lib/akmods/` tracking directory:
+
+```bash
+# Create missing directory
+sudo mkdir -p /var/lib/akmods
+sudo chown root:akmods /var/lib/akmods
+sudo chmod 0755 /var/lib/akmods
+```
+
+After this fix, akmods should detect existing kmod-nvidia packages and skip
+rebuilding on subsequent boots.
+
+### Option B: Disable akmods at Boot
+
+If fixing doesn't help, disable the boot service while keeping akmod-nvidia
+for future kernel updates:
+
+```bash
+sudo systemctl disable --now akmods.service
+```
+
+After kernel updates, manually trigger build:
+```bash
+sudo akmods --force
+sudo reboot
+```
+
+### Option C: kmod-only (No Automatic Rebuilds)
+
+For systems where pre-built kmod packages are reliably available:
+
+```bash
+# Remove akmod build system
+sudo dnf remove akmod-nvidia kmodtool akmods
+
+# Install pre-built kmod
+sudo dnf install kmod-nvidia
+```
+
+After kernel updates, manually install new kmod when available (usually 1-7 days).
+
+### Trade-offs
+
+| Approach | Boot Time | After Kernel Update |
+|----------|-----------|-------------------|
+| Fix akmods | Fast | Automatic |
+| Disable at boot | Fast | Manual trigger |
+| kmod-only | Fast | Manual install |
+
+### Verification Commands
+
+```bash
+# Check if akmods is causing delays
+systemd-analyze critical-chain | grep akmods
+
+# Check installed packages
+rpm -qa | grep -E "akmod|kmod-nvidia"
+
+# Check kmod is loaded
+lsmod | grep nvidia
+```
+
+### Other Common Issues
+
+| Issue | Symptom | Solution |
+|-------|---------|----------|
+| Secure Boot block | Module not loading | `mokutil --sb-state`, enroll MOK key |
+| Build failure | nvidia-smi not found | Check `/var/cache/akmods/nvidia/*.log` |
+| /boot full | initramfs errors | Clean old kernels: `dnf remove $(rpm -q kernel | grep -v $(uname -r))` |
+| Repo conflict | "package filtered" errors | Remove all nvidia, reinstall from RPM Fusion only |
+
 ## Tested Configurations
 
 | Distro | Version | GPU | Driver | Status |

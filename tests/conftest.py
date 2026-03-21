@@ -324,3 +324,45 @@ def mock_secure_boot_disabled(monkeypatch):
 def mock_is_root(monkeypatch):
     """Mock is_root to return True in all relevant modules."""
     monkeypatch.setattr("nvidia_inst.utils.permissions.is_root", lambda: True)
+
+
+@pytest.fixture
+def mock_kmod_only_setup(monkeypatch):
+    """Mock a kmod-only setup (no akmod installed)."""
+    monkeypatch.setattr(
+        "nvidia_inst.installer.uninstaller.check_nvidia_packages_installed",
+        lambda distro: [
+            "kmod-nvidia-6.19.8-200.fc43.x86_64-580.126.18-1.fc43.x86_64",
+            "xorg-x11-drv-nvidia-580.126.18-1.fc43.x86_64",
+            "xorg-x11-drv-nvidia-cuda-580.126.18-1.fc43.x86_64",
+            "nvidia-persistenced-580.126.18-1.fc43.x86_64",
+        ],
+    )
+
+
+@pytest.fixture
+def mock_akmod_setup(monkeypatch):
+    """Mock an akmod setup (with akmod installed)."""
+    monkeypatch.setattr(
+        "nvidia_inst.installer.uninstaller.check_nvidia_packages_installed",
+        lambda distro: [
+            "akmod-nvidia-580.126.18-1.fc43.x86_64",
+            "kmod-nvidia-6.19.8-200.fc43.x86_64-580.126.18-1.fc43.x86_64",
+            "xorg-x11-drv-nvidia-580.126.18-1.fc43.x86_64",
+            "xorg-x11-drv-nvidia-cuda-580.126.18-1.fc43.x86_64",
+        ],
+    )
+
+
+@pytest.fixture
+def mock_nvidia_working_kmod_only(monkeypatch):
+    """Mock nvidia_working for kmod-only setup."""
+    monkeypatch.setattr(
+        "nvidia_inst.installer.validation.is_nvidia_working",
+        lambda: {
+            "is_working": True,
+            "driver_version": "580.126.18",
+            "kernel_module_loaded": True,
+            "gpu_detected": True,
+        },
+    )
