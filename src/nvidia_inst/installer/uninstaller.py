@@ -348,7 +348,7 @@ def _remove_versionlock_entries(packages: list[str]) -> list[str]:
     for pkg_pattern in packages:
         try:
             result = subprocess.run(
-                ["dnf", "versionlock", "delete", "--", pkg_pattern],
+                ["dnf", "versionlock", "delete", pkg_pattern],
                 capture_output=True,
                 text=True,
                 timeout=30,
