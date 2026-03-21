@@ -602,6 +602,13 @@ This project uses distribution package repositories to install drivers:
 - **Arch Linux Extra**: Official community repository, not affiliated with NVIDIA Corporation
 - **openSUSE NVIDIA Repository**: Provided by NVIDIA for openSUSE users
 
+## Documentation
+
+- **[CUDA Installation Guide](docs/CUDA_INSTALLATION.md)** - Comprehensive CUDA installation guide with hardware compatibility matrices
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Detailed system design and GPU matrix
+- **[PATTERNS.md](PATTERNS.md)** - Code patterns and implementation examples
+- **[AGENTS.md](AGENTS.md)** - Development guidelines for contributors
+
 ## Credits
 
 - Nvidia Driver Compatibility Matrix: https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/

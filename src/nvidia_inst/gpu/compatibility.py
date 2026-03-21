@@ -108,6 +108,97 @@ def get_driver_range(gpu: GPUInfo) -> DriverRange:
     return _get_driver_range_fallback(generation)
 
 
+def validate_cuda_version(cuda_version: str, gpu: GPUInfo) -> tuple[bool, str]:
+    """Validate CUDA version compatibility with GPU generation.
+
+    Args:
+        cuda_version: CUDA version string (e.g., "12.2", "13.x").
+        gpu: GPU information.
+
+    Returns:
+        Tuple of (is_compatible, message).
+    """
+    driver_range = get_driver_range(gpu)
+    min_cuda = driver_range.cuda_min
+    max_cuda = driver_range.cuda_max
+
+    # Parse version, handle "x" wildcard
+    def parse_version(ver: str):
+        if ver.endswith(".x"):
+            # "13.x" -> (13, 0, True) where True indicates wildcard
+            return (int(ver[:-2]), 0, True)
+        else:
+            parts = ver.split(".")
+            return (int(parts[0]), int(parts[1]) if len(parts) > 1 else 0, False)
+
+    cuda_parsed = parse_version(cuda_version)
+    min_parsed = parse_version(min_cuda)
+    max_parsed = parse_version(max_cuda) if max_cuda else None
+
+    # Check lower bound
+    if cuda_parsed < min_parsed:
+        return (
+            False,
+            f"CUDA {cuda_version} is below minimum supported version {min_cuda} for {gpu.generation}",
+        )
+
+    # Check upper bound
+    if max_parsed:
+        # If max has wildcard, treat as up to but not including next major version
+        if max_parsed[2]:  # max_cuda ends with .x
+            if cuda_parsed[0] > max_parsed[0]:
+                return (
+                    False,
+                    f"CUDA {cuda_version} exceeds maximum supported version {max_cuda} for {gpu.generation}",
+                )
+        else:
+            if cuda_parsed > max_parsed:
+                return (
+                    False,
+                    f"CUDA {cuda_version} exceeds maximum supported version {max_cuda} for {gpu.generation}",
+                )
+
+    return (True, f"CUDA {cuda_version} is compatible with {gpu.generation}")
+
+
+def validate_driver_version(driver_version: str, gpu: GPUInfo) -> tuple[bool, str]:
+    """Validate driver version compatibility with GPU generation.
+
+    Args:
+        driver_version: Driver version string (e.g., "535.154.05").
+        gpu: GPU information.
+
+    Returns:
+        Tuple of (is_compatible, message).
+    """
+    driver_range = get_driver_range(gpu)
+    min_driver = driver_range.min_version
+    max_driver = driver_range.max_version
+
+    # Simple version comparison: split into integers and compare
+    def version_to_tuple(v: str):
+        return tuple(map(int, v.split(".")))
+
+    driver_parsed = version_to_tuple(driver_version)
+    min_parsed = version_to_tuple(min_driver)
+
+    if driver_parsed < min_parsed:
+        return (
+            False,
+            f"Driver {driver_version} is below minimum supported version {min_driver} for {gpu.generation}",
+        )
+
+    if max_driver:
+        max_parsed = version_to_tuple(max_driver)
+        if driver_parsed > max_parsed:
+            return (
+                False,
+                f"Driver {driver_version} exceeds maximum supported version {max_driver} for {gpu.generation}",
+            )
+
+    return (True, f"Driver {driver_version} is compatible with {gpu.generation}")
+
+
 def _get_driver_range_fallback(generation: str) -> DriverRange:
     """Fallback driver range calculation using hardcoded values."""
     if generation == "kepler":
@@ -124,7 +215,7 @@ def _get_driver_range_fallback(generation: str) -> DriverRange:
             is_limited=True,
             max_branch="470",
             eol_message=f"GPU generation '{generation}' is end-of-life. "
-                        f"Maximum supported driver: {max_version}",
+            f"Maximum supported driver: {max_version}",
         )
 
     if generation in ("maxwell", "pascal", "volta"):
@@ -143,8 +234,8 @@ def _get_driver_range_fallback(generation: str) -> DriverRange:
             is_limited=True,
             max_branch=branch,
             eol_message=f"GPU generation '{generation}' uses driver branch {branch}. "
-                        f"Supports {branch}.xx drivers up to {max_major_minor}. "
-                        f"Will receive branch updates through October 2028.",
+            f"Supports {branch}.xx drivers up to {max_major_minor}. "
+            f"Will receive branch updates through October 2028.",
         )
 
     cuda_range = _get_cuda_range(generation)
@@ -235,6 +326,7 @@ def get_max_driver_version(gpu_name: str) -> str | None:
         Max driver version string if GPU has version limit, None for latest.
     """
     from nvidia_inst.gpu.detector import _get_gpu_generation
+
     generation = _get_gpu_generation(gpu_name)
 
     if not generation:
@@ -255,7 +347,9 @@ def get_max_driver_version(gpu_name: str) -> str | None:
 
     if generation in limited_generations:
         max_version = limited_generations[generation]
-        logger.info(f"GPU {gpu_name} has limited driver support (generation: {generation})")
+        logger.info(
+            f"GPU {gpu_name} has limited driver support (generation: {generation})"
+        )
         logger.info(f"Max driver version: {max_version}")
         return max_version
 
@@ -293,6 +387,7 @@ def _compare_versions(v1: str, v2: str) -> bool:
     Returns:
         True if v1 >= v2.
     """
+
     def parse_version(v: str) -> tuple:
         parts = re.findall(r"\d+", v)
         return tuple(int(p) for p in parts[:3])

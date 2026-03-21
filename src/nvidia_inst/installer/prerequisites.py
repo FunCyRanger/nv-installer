@@ -71,7 +71,9 @@ class PrerequisitesChecker:
 
         if driver_range:
             version_checker = VersionChecker()
-            result.version_check = version_checker.check_compatibility(distro_id, driver_range)
+            result.version_check = version_checker.check_compatibility(
+                distro_id, driver_range
+            )
 
             if not result.version_check.compatible:
                 result.success = False
@@ -89,6 +91,52 @@ class PrerequisitesChecker:
         )
 
         return result
+
+    def get_cuda_repo_fix_commands(
+        self, distro_id: str, distro_version: str
+    ) -> list[str]:
+        """Get fix commands to add missing CUDA repository.
+
+        Returns:
+            List of commands to run to add CUDA repository.
+        """
+        fix_commands = []
+        if distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
+            if not distro_version:
+                distro_version = "43"
+            # Check if CUDA repo exists
+            cuda_repo = self._repo_exists("cuda-fedora")
+            if not cuda_repo:
+                cuda_repo = self._repo_exists(f"cuda-fedora{distro_version}")
+            if not cuda_repo:
+                # Support both dnf5 (Fedora 41+) and dnf4 syntax
+                fix_commands.append(
+                    f"sudo dnf config-manager addrepo --from-repofile=https://developer.download.nvidia.com/compute/cuda/repos/fedora{distro_version}/x86_64/cuda-fedora{distro_version}.repo --overwrite 2>/dev/null || "
+                    f"sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/fedora{distro_version}/x86_64/cuda-fedora{distro_version}.repo"
+                )
+        elif distro_id in ("ubuntu", "debian", "linuxmint", "pop"):
+            cuda_keyring_installed = self._package_installed("cuda-keyring", distro_id)
+            if not cuda_keyring_installed:
+                if distro_id == "ubuntu":
+                    version_short = distro_version.replace(".", "")
+                    fix_commands.append(
+                        f"wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu{version_short}/x86_64/cuda-keyring_1.1-1_all.deb && "
+                        f"sudo dpkg -i cuda-keyring_1.1-1_all.deb"
+                    )
+                else:
+                    version_short = distro_version.replace(".", "")
+                    fix_commands.append(
+                        f"wget https://developer.download.nvidia.com/compute/cuda/repos/debian{version_short}/x86_64/cuda-keyring_1.1-1_all.deb && "
+                        f"sudo dpkg -i cuda-keyring_1.1-1_all.deb"
+                    )
+        elif distro_id in ("arch", "manjaro", "endeavouros"):
+            # CUDA is available via AUR, no repository needed
+            pass
+        elif distro_id in ("opensuse", "sles"):
+            # CUDA repository is the same as NVIDIA driver repository
+            # Already added via openSUSE repos check
+            pass
+        return fix_commands
 
     def _check_package_manager(self) -> tuple[bool, str]:
         """Check if package manager is available."""
@@ -137,14 +185,31 @@ class PrerequisitesChecker:
             distro_version = "43"
 
         rpmfusion_nonfree = self._repo_exists("rpmfusion-nonfree")
+        cuda_repo = self._repo_exists("cuda-fedora")
+        # Also check for cuda-fedora{version} pattern
+        if not cuda_repo:
+            cuda_repo = self._repo_exists(f"cuda-fedora{distro_version}")
 
         if rpmfusion_nonfree:
             repos_status["configured"].append("RPM Fusion nonfree")
         else:
-            repos_status["missing"].append("RPM Fusion nonfree (required for proprietary drivers)")
+            repos_status["missing"].append(
+                "RPM Fusion nonfree (required for proprietary drivers)"
+            )
             repos_status["fix_commands"].append(
                 f"sudo dnf install https://download1.rpmfusion.org/nonfree/fedora/"
                 f"rpmfusion-nonfree-release-{distro_version}.noarch.rpm"
+            )
+
+        if cuda_repo:
+            repos_status["configured"].append("NVIDIA CUDA repository")
+        else:
+            repos_status["missing"].append(
+                "NVIDIA CUDA repository (required for CUDA toolkit)"
+            )
+            repos_status["fix_commands"].append(
+                f"sudo dnf config-manager addrepo --from-repofile=https://developer.download.nvidia.com/compute/cuda/repos/fedora{distro_version}/x86_64/cuda-fedora{distro_version}.repo --overwrite 2>/dev/null || "
+                f"sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/fedora{distro_version}/x86_64/cuda-fedora{distro_version}.repo"
             )
 
         return repos_status
@@ -165,6 +230,30 @@ class PrerequisitesChecker:
         else:
             repos_status["configured"].append("Debian contrib, non-free")
 
+        # Check for CUDA repository (via cuda-keyring package)
+        cuda_keyring_installed = self._package_installed("cuda-keyring", distro_id)
+        if cuda_keyring_installed:
+            repos_status["configured"].append("NVIDIA CUDA repository")
+        else:
+            repos_status["missing"].append(
+                "NVIDIA CUDA repository (required for CUDA toolkit)"
+            )
+            if distro_id == "ubuntu":
+                # Convert version like "22.04" to "2204"
+                version_short = distro_version.replace(".", "")
+                fix_cmd = (
+                    f"wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu{version_short}/x86_64/cuda-keyring_1.1-1_all.deb && "
+                    f"sudo dpkg -i cuda-keyring_1.1-1_all.deb"
+                )
+            else:  # Debian
+                # Assuming Debian 11 (bullseye) or 12 (bookworm)
+                version_short = distro_version.replace(".", "")
+                fix_cmd = (
+                    f"wget https://developer.download.nvidia.com/compute/cuda/repos/debian{version_short}/x86_64/cuda-keyring_1.1-1_all.deb && "
+                    f"sudo dpkg -i cuda-keyring_1.1-1_all.deb"
+                )
+            repos_status["fix_commands"].append(fix_cmd)
+
         return repos_status
 
     def _check_arch_repos(self) -> dict:
@@ -176,10 +265,9 @@ class PrerequisitesChecker:
         }
 
         repos_status["configured"].append("Core repositories")
+        repos_status["configured"].append("CUDA available via AUR (not a repository)")
 
-        repos_status["fix_commands"].append(
-            "sudo pacman -Syu --needed multilib-devel"
-        )
+        repos_status["fix_commands"].append("sudo pacman -Syu --needed multilib-devel")
 
         return repos_status
 
@@ -192,6 +280,7 @@ class PrerequisitesChecker:
         }
 
         repos_status["configured"].append("openSUSE OSS")
+        repos_status["configured"].append("NVIDIA CUDA repository (provided by NVIDIA)")
         repos_status["fix_commands"].append(
             "sudo zypper addrepo --refresh https://download.nvidia.com/opensuse/leap NVIDIA"
         )
@@ -208,8 +297,51 @@ class PrerequisitesChecker:
                 timeout=10,
             )
             return repo_pattern in result.stdout.lower()
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+        except (
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+            FileNotFoundError,
+        ):
             return False
+
+    def _package_installed(self, package_name: str, distro_id: str) -> bool:
+        """Check if a package is installed."""
+        try:
+            if distro_id in ("ubuntu", "debian", "linuxmint", "pop"):
+                result = subprocess.run(
+                    ["dpkg", "-l", package_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                return package_name in result.stdout and "ii" in result.stdout
+            elif distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
+                result = subprocess.run(
+                    ["rpm", "-q", package_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                return result.returncode == 0
+            elif distro_id in ("arch", "manjaro", "endeavouros"):
+                result = subprocess.run(
+                    ["pacman", "-Qi", package_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                return result.returncode == 0
+            elif distro_id in ("opensuse", "sles"):
+                result = subprocess.run(
+                    ["rpm", "-q", package_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                return result.returncode == 0
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return False
+        return False
 
     def _check_driver_packages(self, distro_id: str) -> dict:
         """Check if driver packages are available."""
@@ -228,7 +360,10 @@ class PrerequisitesChecker:
                 )
                 if result.returncode == 0 and "akmod-nvidia" in result.stdout:
                     packages_status["available"] = True
-                    packages_status["packages"] = ["akmod-nvidia", "xorg-x11-drv-nvidia-cuda"]
+                    packages_status["packages"] = [
+                        "akmod-nvidia",
+                        "xorg-x11-drv-nvidia-cuda",
+                    ]
 
             elif distro_id in ("ubuntu", "debian", "linuxmint", "pop"):
                 result = subprocess.run(
@@ -239,7 +374,10 @@ class PrerequisitesChecker:
                 )
                 if result.returncode == 0:
                     packages_status["available"] = True
-                    packages_status["packages"] = ["nvidia-driver-535", "nvidia-dkms-535"]
+                    packages_status["packages"] = [
+                        "nvidia-driver-535",
+                        "nvidia-dkms-535",
+                    ]
 
             elif distro_id in ("arch", "manjaro"):
                 packages_status["available"] = True

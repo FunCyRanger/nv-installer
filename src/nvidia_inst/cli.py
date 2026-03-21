@@ -17,6 +17,8 @@ from nvidia_inst.gpu.compatibility import (
     DriverRange,
     get_driver_range,
     is_driver_compatible,
+    validate_cuda_version,
+    validate_driver_version,
 )
 from nvidia_inst.gpu.detector import (
     GPUDetectionError,
@@ -28,6 +30,7 @@ from nvidia_inst.gpu.hybrid import (
     detect_hybrid,
     get_native_tool,
 )
+from nvidia_inst.installer.cuda import get_cuda_installer
 from nvidia_inst.installer.driver import (
     check_nonfree_available,
     check_nvidia_open_available,
@@ -140,6 +143,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cuda-version",
         help="Specific CUDA version to install",
+    )
+
+    parser.add_argument(
+        "--ignore-compatibility",
+        action="store_true",
+        help="Ignore CUDA/driver compatibility warnings",
     )
 
     parser.add_argument(
@@ -268,30 +277,42 @@ def print_compatibility_info(
     print(" System Compatibility Check")
     print("=" * 50)
 
-    print("\nDistribution:")
-    print(f"  {distro}")
+    # Distribution line
+    print(f"\nDistribution: {distro}")
 
-    print("\nGPU:")
-    print(f"  {gpu.model}")
+    # GPU line with optional compute capability and VRAM
+    gpu_info = gpu.model
+    details = []
     if gpu.compute_capability:
-        print(f"  Compute Capability: {gpu.compute_capability}")
+        details.append(f"Compute {gpu.compute_capability}")
     if gpu.vram:
-        print(f"  VRAM: {gpu.vram}")
+        details.append(f"VRAM {gpu.vram}")
+    if details:
+        gpu_info += f" ({', '.join(details)})"
+    print(f"GPU: {gpu_info}")
 
-    print("\nCompatible Driver:")
+    # Driver and CUDA line
+    driver_info = ""
     if driver_range.max_version:
-        print(f"  {driver_range.min_version} - {driver_range.max_version}")
+        driver_info = f"{driver_range.min_version} - {driver_range.max_version}"
     else:
-        print(f"  {driver_range.min_version} or later")
+        driver_info = f"{driver_range.min_version} or later"
 
-    print("\nCUDA Support:")
-    if driver_range.cuda_max:
-        print(f"  {driver_range.cuda_min} - {driver_range.cuda_max}")
+    cuda_info = ""
+    if driver_range.cuda_min:
+        if driver_range.cuda_max:
+            cuda_info = f"CUDA {driver_range.cuda_min} - {driver_range.cuda_max}"
+        else:
+            cuda_info = f"CUDA {driver_range.cuda_min} or later"
+
+    if cuda_info:
+        print(f"Driver: {driver_info} ({cuda_info})")
     else:
-        print(f"  {driver_range.cuda_min} or later")
+        print(f"Driver: {driver_info}")
 
-    print("\nStatus:")
-    print(f"  {'Compatible' if not driver_range.is_eol else 'Limited (EOL GPU)'}")
+    # Status line
+    status = "Compatible" if not driver_range.is_eol else "Limited (EOL GPU)"
+    print(f"Status: {status}")
 
 
 def _get_cuda_range_str(driver_range: DriverRange) -> str | None:
@@ -641,11 +662,12 @@ def _build_nothing_options(
     return options
 
 
-def show_driver_options(state: DriverState) -> int:
+def show_driver_options(state: DriverState, distro_id: str) -> int:
     """Show driver options menu and return selected option.
 
     Args:
         state: Current driver state with available options.
+        distro_id: Distribution ID for CUDA detection.
 
     Returns:
         Selected DriverOption, or None to cancel.
@@ -656,7 +678,16 @@ def show_driver_options(state: DriverState) -> int:
     print(f"\n{state.message}")
 
     if state.current_version:
-        print(f"  Installed: {state.current_version}")
+        cuda_version = None
+        try:
+            cuda_installer = get_cuda_installer(distro_id)
+            cuda_version = cuda_installer.get_installed_cuda_version()
+        except Exception:
+            pass
+        if cuda_version:
+            print(f"  Installed: {state.current_version} (CUDA {cuda_version})")
+        else:
+            print(f"  Installed: {state.current_version}")
 
     if not state.is_compatible and state.suggested_packages:
         print(f"  Recommended: {' '.join(state.suggested_packages)}")
@@ -726,7 +757,7 @@ def check_prerequisites(
         print("NOT AVAILABLE (repos may need enabling)")
 
     if result.version_check:
-        print_version_check(result.version_check, driver_range)
+        print_version_check(result.version_check, driver_range, distro_id)
 
     print("\n" + "-" * 50)
 
@@ -867,8 +898,14 @@ def handle_secure_boot(
         return (False, state)
 
 
-def print_version_check(version_check: Any, driver_range: Any) -> None:
-    """Print version check results."""
+def print_version_check(version_check: Any, driver_range: Any, distro_id: str) -> None:
+    """Print version check results.
+
+    Args:
+        version_check: Version check result.
+        driver_range: Driver compatibility range.
+        distro_id: Distribution ID for CUDA detection.
+    """
     print("\n" + "-" * 50)
     print(" Version Availability Check")
     print("-" * 50)
@@ -891,7 +928,36 @@ def print_version_check(version_check: Any, driver_range: Any) -> None:
         print("  Unable to fetch official versions")
 
     if version_check.installed_driver_version:
-        print(f"\nInstalled Driver: {version_check.installed_driver_version}")
+        cuda_version = None
+        try:
+            cuda_installer = get_cuda_installer(distro_id)
+            cuda_version = cuda_installer.get_installed_cuda_version()
+        except Exception:
+            pass
+
+        cuda_info = ""
+        if driver_range.cuda_min:
+            if driver_range.cuda_max:
+                cuda_info = (
+                    f"supports {driver_range.cuda_min} - {driver_range.cuda_max}"
+                )
+            else:
+                cuda_info = f"supports {driver_range.cuda_min} or later"
+
+        if cuda_version and cuda_info:
+            print(
+                f"\nInstalled Driver: {version_check.installed_driver_version} (CUDA {cuda_version} installed, {cuda_info})"
+            )
+        elif cuda_version:
+            print(
+                f"\nInstalled Driver: {version_check.installed_driver_version} (CUDA {cuda_version} installed)"
+            )
+        elif cuda_info:
+            print(
+                f"\nInstalled Driver: {version_check.installed_driver_version} ({cuda_info})"
+            )
+        else:
+            print(f"\nInstalled Driver: {version_check.installed_driver_version}")
 
     print("\nCompatibility:")
     if version_check.compatible_versions:
@@ -1018,6 +1084,51 @@ def _rebuild_initramfs(distro_id: str) -> bool:
         return False
 
 
+def _install_cuda_packages(distro: DistroInfo, cuda_version: str | None = None) -> bool:
+    """Install CUDA toolkit packages, ensuring repository is present.
+
+    Args:
+        distro: Distribution information.
+        cuda_version: Specific CUDA version.
+
+    Returns:
+        True if successful, False otherwise.
+    """
+    from nvidia_inst.distro.factory import get_package_manager
+    from nvidia_inst.installer.cuda import get_cuda_installer
+    from nvidia_inst.installer.prerequisites import PrerequisitesChecker
+
+    # Ensure CUDA repository is present
+    checker = PrerequisitesChecker()
+    fix_commands = checker.get_cuda_repo_fix_commands(distro.id, distro.version_id)
+    if fix_commands:
+        logger.info("Missing CUDA repository, attempting to add...")
+        success, message = checker.fix_repositories(fix_commands)
+        if not success:
+            logger.error(f"Failed to add CUDA repository: {message}")
+            print(f"[ERROR] Failed to add CUDA repository: {message}")
+            return False
+        print("[INFO] CUDA repository added successfully")
+
+    # Get CUDA packages
+    cuda_installer = get_cuda_installer(distro.id)
+    cuda_pkgs = cuda_installer.get_cuda_packages(cuda_version)
+    if not cuda_pkgs:
+        logger.info("No CUDA packages to install")
+        return True
+
+    print(f"\nInstalling CUDA packages: {' '.join(cuda_pkgs)}")
+    pkg_manager = get_package_manager()
+    try:
+        pkg_manager.install(cuda_pkgs)
+        print("[INFO] CUDA packages installed successfully")
+        return True
+    except Exception as e:
+        logger.error(f"CUDA installation failed: {e}")
+        print(f"[ERROR] CUDA installation failed: {e}")
+        return False
+
+
 def _prompt_reboot() -> None:
     """Prompt user to reboot."""
     print("\nPlease reboot your system for changes to take effect.")
@@ -1033,8 +1144,13 @@ def _dry_run_change(
     state: DriverState,
     packages: list[str],
     distro: DistroInfo,
+    with_cuda: bool = True,
+    cuda_version: str | None = None,
 ) -> None:
     """Show dry-run output for driver change."""
+    from nvidia_inst.installer.cuda import get_cuda_installer
+    from nvidia_inst.installer.prerequisites import PrerequisitesChecker
+
     print("\n" + "=" * 50)
     print(" DRY-RUN MODE")
     print("=" * 50)
@@ -1043,31 +1159,69 @@ def _dry_run_change(
     if state.current_version:
         print(f"  Installed: {state.current_version}")
 
-    print(f"\nTarget packages: {' '.join(packages)}")
+    print(f"\nTarget driver packages: {' '.join(packages)}")
+
+    # CUDA packages
+    cuda_pkgs = []
+    if with_cuda:
+        cuda_installer = get_cuda_installer(distro.id)
+        cuda_pkgs = cuda_installer.get_cuda_packages(cuda_version)
+        if cuda_pkgs:
+            print(f"Target CUDA packages: {' '.join(cuda_pkgs)}")
+        else:
+            print("No CUDA packages to install")
+
+    # Check CUDA repository
+    checker = PrerequisitesChecker()
+    fix_commands = checker.get_cuda_repo_fix_commands(distro.id, distro.version_id)
+    if fix_commands:
+        print("\n[!] CUDA repository missing. Commands to add:")
+        for cmd in fix_commands:
+            print(f"    {cmd}")
 
     print("\nSteps to execute manually:")
+    step = 1
     if state.current_version or state.status == DriverStatus.NOUVEAU_ACTIVE:
         if distro.id in ("ubuntu", "debian"):
-            print("  1. sudo apt remove --purge -y nvidia-driver-* nvidia-dkms-*")
+            print(f"  {step}. sudo apt remove --purge -y nvidia-driver-* nvidia-dkms-*")
         elif distro.id in ("fedora", "rhel", "centos"):
-            print("  1. sudo dnf remove -y akmod-nvidia xorg-x11-drv-nvidia*")
+            print(f"  {step}. sudo dnf remove -y akmod-nvidia xorg-x11-drv-nvidia*")
         elif distro.id in ("arch", "manjaro"):
-            print("  1. sudo pacman -Rns --noconfirm nvidia nvidia-utils")
+            print(f"  {step}. sudo pacman -Rns --noconfirm nvidia nvidia-utils")
         elif distro.id in ("opensuse", "sles"):
-            print("  1. sudo zypper remove -y x11-video-nvidiaG05")
+            print(f"  {step}. sudo zypper remove -y x11-video-nvidiaG05")
+        step += 1
     if distro.id in ("ubuntu", "debian"):
-        print("  2. sudo apt update")
-        print(f"  3. sudo apt install -y {' '.join(packages)}")
-        print("  4. sudo update-initramfs -u")
+        print(f"  {step}. sudo apt update")
+        step += 1
+        print(f"  {step}. sudo apt install -y {' '.join(packages)}")
+        step += 1
+        if cuda_pkgs:
+            print(f"  {step}. sudo apt install -y {' '.join(cuda_pkgs)}")
+            step += 1
+        print(f"  {step}. sudo update-initramfs -u")
+        step += 1
     elif distro.id in ("fedora", "rhel", "centos"):
-        print("  2. sudo dnf makecache")
-        print(f"  3. sudo dnf install -y {' '.join(packages)}")
-        print("  4. sudo dracut -f --regenerate-all")
+        print(f"  {step}. sudo dnf makecache")
+        step += 1
+        print(f"  {step}. sudo dnf install -y {' '.join(packages)}")
+        step += 1
+        if cuda_pkgs:
+            print(f"  {step}. sudo dnf install -y {' '.join(cuda_pkgs)}")
+            step += 1
+        print(f"  {step}. sudo dracut -f --regenerate-all")
+        step += 1
     elif distro.id in ("arch", "manjaro"):
-        print("  2. sudo pacman -Sy")
-        print(f"  3. sudo pacman -S --noconfirm {' '.join(packages)}")
-        print("  4. sudo mkinitcpio -P")
-    print("  5. sudo reboot")
+        print(f"  {step}. sudo pacman -Sy")
+        step += 1
+        print(f"  {step}. sudo pacman -S --noconfirm {' '.join(packages)}")
+        step += 1
+        if cuda_pkgs:
+            print(f"  {step}. sudo pacman -S --noconfirm {' '.join(cuda_pkgs)}")
+            step += 1
+        print(f"  {step}. sudo mkinitcpio -P")
+        step += 1
+    print(f"  {step}. sudo reboot")
 
     print("\nOr run this script without --dry-run:")
     print("  sudo nvidia-inst")
@@ -1076,40 +1230,85 @@ def _dry_run_change(
 def _dry_run_nvidia_open_install(
     distro: DistroInfo,
     packages: list[str],
+    with_cuda: bool = True,
+    cuda_version: str | None = None,
 ) -> None:
     """Show dry-run output for NVIDIA Open installation."""
+    from nvidia_inst.installer.cuda import get_cuda_installer
+    from nvidia_inst.installer.prerequisites import PrerequisitesChecker
+
     print("\n" + "=" * 50)
     print(" DRY-RUN MODE - NVIDIA Open Installation")
     print("=" * 50)
 
-    print(f"\nTarget packages: {' '.join(packages)}")
+    print(f"\nTarget driver packages: {' '.join(packages)}")
+
+    # CUDA packages
+    cuda_pkgs = []
+    if with_cuda:
+        cuda_installer = get_cuda_installer(distro.id)
+        cuda_pkgs = cuda_installer.get_cuda_packages(cuda_version)
+        if cuda_pkgs:
+            print(f"Target CUDA packages: {' '.join(cuda_pkgs)}")
+        else:
+            print("No CUDA packages to install")
+
+    # Check CUDA repository
+    checker = PrerequisitesChecker()
+    fix_commands = checker.get_cuda_repo_fix_commands(distro.id, distro.version_id)
+    if fix_commands:
+        print("\n[!] CUDA repository missing. Commands to add:")
+        for cmd in fix_commands:
+            print(f"    {cmd}")
 
     print("\nSteps to execute manually:")
+    step = 1
     driver_type = get_current_driver_type()
     if driver_type in ("proprietary", "nvidia_open"):
         if distro.id in ("ubuntu", "debian"):
-            print("  1. sudo apt remove --purge -y nvidia-driver-* nvidia-dkms-*")
+            print(f"  {step}. sudo apt remove --purge -y nvidia-driver-* nvidia-dkms-*")
         elif distro.id in ("fedora", "rhel", "centos"):
-            print("  1. sudo dnf remove -y akmod-nvidia xorg-x11-drv-nvidia*")
+            print(f"  {step}. sudo dnf remove -y akmod-nvidia xorg-x11-drv-nvidia*")
         elif distro.id in ("arch", "manjaro"):
-            print("  1. sudo pacman -Rns --noconfirm nvidia nvidia-utils")
+            print(f"  {step}. sudo pacman -Rns --noconfirm nvidia nvidia-utils")
         elif distro.id in ("opensuse", "sles"):
-            print("  1. sudo zypper remove -y x11-video-nvidiaG05")
+            print(f"  {step}. sudo zypper remove -y x11-video-nvidiaG05")
+        step += 1
         print()
 
     if distro.id in ("ubuntu", "debian"):
-        print(f"  2. sudo apt install -y {' '.join(packages)}")
-        print("  3. sudo update-initramfs -u")
+        print(f"  {step}. sudo apt install -y {' '.join(packages)}")
+        step += 1
+        if cuda_pkgs:
+            print(f"  {step}. sudo apt install -y {' '.join(cuda_pkgs)}")
+            step += 1
+        print(f"  {step}. sudo update-initramfs -u")
+        step += 1
     elif distro.id in ("fedora", "rhel", "centos"):
-        print(f"  2. sudo dnf install -y {' '.join(packages)}")
-        print("  3. sudo dracut -f --regenerate-all")
+        print(f"  {step}. sudo dnf install -y {' '.join(packages)}")
+        step += 1
+        if cuda_pkgs:
+            print(f"  {step}. sudo dnf install -y {' '.join(cuda_pkgs)}")
+            step += 1
+        print(f"  {step}. sudo dracut -f --regenerate-all")
+        step += 1
     elif distro.id in ("arch", "manjaro"):
-        print(f"  2. sudo pacman -S --noconfirm {' '.join(packages)}")
-        print("  3. sudo mkinitcpio -P")
+        print(f"  {step}. sudo pacman -S --noconfirm {' '.join(packages)}")
+        step += 1
+        if cuda_pkgs:
+            print(f"  {step}. sudo pacman -S --noconfirm {' '.join(cuda_pkgs)}")
+            step += 1
+        print(f"  {step}. sudo mkinitcpio -P")
+        step += 1
     elif distro.id in ("opensuse", "sles"):
-        print(f"  2. sudo zypper install -y {' '.join(packages)}")
-        print("  3. sudo dracut -f --regenerate-all")
-    print("  4. sudo reboot")
+        print(f"  {step}. sudo zypper install -y {' '.join(packages)}")
+        step += 1
+        if cuda_pkgs:
+            print(f"  {step}. sudo zypper install -y {' '.join(cuda_pkgs)}")
+            step += 1
+        print(f"  {step}. sudo dracut -f --regenerate-all")
+        step += 1
+    print(f"  {step}. sudo reboot")
 
     print("\nOr run this script without --dry-run:")
     print("  sudo nvidia-inst")
@@ -1212,6 +1411,8 @@ def execute_driver_change(
     gpu: GPUInfo,
     driver_range: DriverRange,
     dry_run: bool = False,
+    with_cuda: bool = True,
+    cuda_version: str | None = None,
 ) -> int:
     """Execute the selected driver change.
 
@@ -1222,6 +1423,8 @@ def execute_driver_change(
         gpu: GPU information.
         driver_range: Compatible driver range.
         dry_run: If True, show what would happen without executing.
+        with_cuda: Install CUDA toolkit.
+        cuda_version: Specific CUDA version.
 
     Returns:
         0 on success, 1 on failure.
@@ -1241,8 +1444,10 @@ def execute_driver_change(
 
         from nvidia_inst.utils.permissions import require_root
 
+        step = 1
+
         if not require_root(interactive=True):
-            print("\n[ERROR] Root privileges required to remove drivers.")
+            print("\n[ERROR] Root privileges required to install drivers.")
             return 1
 
         print("\n[WARNING] This will remove NVIDIA proprietary driver.")
@@ -1267,7 +1472,9 @@ def execute_driver_change(
         )
 
         if dry_run:
-            _dry_run_change(state, packages, distro)
+            _dry_run_change(
+                state, packages, distro, with_cuda=with_cuda, cuda_version=cuda_version
+            )
             return 0
 
         from nvidia_inst.utils.permissions import require_root
@@ -1278,16 +1485,18 @@ def execute_driver_change(
 
         driver_type = get_current_driver_type()
         if driver_type == "nouveau":
-            print("\nNouveau is active. Installing proprietary driver.")
+            print(f"\n[Step {step}] Nouveau is active. Installing proprietary driver.")
             print("Note: Nouveau blacklist will be created automatically.")
+            step += 1
         else:
-            print("\nRemoving old driver packages...")
+            print(f"\n[Step {step}] Removing old driver packages...")
             packages_to_remove = _get_packages_to_remove(distro.id)
             removed = _remove_packages(distro.id, packages_to_remove)
             if removed:
                 print(f"  Removed: {', '.join(removed)}")
+            step += 1
 
-        print(f"\nInstalling: {' '.join(packages)}")
+        print(f"\n[Step {step}] Installing: {' '.join(packages)}")
         pkg_manager = get_package_manager()
         try:
             pkg_manager.install(packages)
@@ -1295,13 +1504,15 @@ def execute_driver_change(
             logger.error(f"Installation failed: {e}")
             print(f"Installation failed: {e}")
             return 1
+        step += 1
 
-        print("\nRebuilding initramfs...")
+        print(f"\n[Step {step}] Rebuilding initramfs...")
         if not _rebuild_initramfs(distro.id):
             print("[WARNING] Initramfs rebuild had issues. Reboot may fail.")
+        step += 1
 
         if check_secure_boot():
-            print("\nSecure Boot detected. Re-signing modules...")
+            print(f"\n[Step {step}] Secure Boot detected. Re-signing modules...")
             key_paths = get_mok_key_paths(distro.id)
             signed, failed = sign_nvidia_modules(
                 key_paths.private_key,
@@ -1313,6 +1524,17 @@ def execute_driver_change(
                 print(
                     "[WARNING] Module signing failed. Driver may not load with Secure Boot."
                 )
+            step += 1
+
+        # Install CUDA toolkit if requested
+        if with_cuda:
+            print(f"\n[Step {step}] Installing CUDA toolkit...")
+            cuda_success = _install_cuda_packages(distro, cuda_version)
+            if not cuda_success:
+                print(
+                    "[WARNING] CUDA toolkit installation failed, but driver is installed."
+                )
+            step += 1
 
         print("\n✓ Driver installed successfully")
         _prompt_reboot()
@@ -1322,7 +1544,9 @@ def execute_driver_change(
         packages = get_nvidia_open_packages(distro.id, driver_range)
 
         if dry_run:
-            _dry_run_nvidia_open_install(distro, packages)
+            _dry_run_nvidia_open_install(
+                distro, packages, with_cuda=with_cuda, cuda_version=cuda_version
+            )
             return 0
 
         from nvidia_inst.utils.permissions import require_root
@@ -1354,6 +1578,14 @@ def execute_driver_change(
         print("\nRebuilding initramfs...")
         if not _rebuild_initramfs(distro.id):
             print("[WARNING] Initramfs rebuild had issues. Reboot may fail.")
+
+        # Install CUDA toolkit if requested
+        if with_cuda:
+            cuda_success = _install_cuda_packages(distro, cuda_version)
+            if not cuda_success:
+                print(
+                    "[WARNING] CUDA toolkit installation failed, but driver is installed."
+                )
 
         print("\n✓ NVIDIA Open installed successfully")
         _prompt_reboot()
@@ -1398,6 +1630,7 @@ def install_driver_cli(
     cuda_version: str | None = None,
     skip_confirmation: bool = False,
     dry_run: bool = False,
+    ignore_compatibility: bool = False,
 ) -> int:
     """Install driver from CLI.
 
@@ -1406,6 +1639,8 @@ def install_driver_cli(
         with_cuda: Install CUDA.
         cuda_version: CUDA version.
         skip_confirmation: Skip confirmation prompt.
+        dry_run: Dry run mode.
+        ignore_compatibility: Ignore CUDA/driver compatibility warnings.
 
     Returns:
         0 on success, 1 on failure.
@@ -1431,6 +1666,26 @@ def install_driver_cli(
 
     driver_range = get_driver_range(gpu)
 
+    # Validate specified driver and CUDA versions
+    if not ignore_compatibility:
+        if driver_version:
+            compatible, message = validate_driver_version(driver_version, gpu)
+            if not compatible:
+                print(f"\nWARNING: {message}")
+                print("         Use --ignore-compatibility to suppress this warning.")
+        if with_cuda and cuda_version:
+            compatible, message = validate_cuda_version(cuda_version, gpu)
+            if not compatible:
+                print(f"\nWARNING: {message}")
+                print("         Use --ignore-compatibility to suppress this warning.")
+    else:
+        if driver_version:
+            _, message = validate_driver_version(driver_version, gpu)
+            logger.debug(f"Driver compatibility: {message}")
+        if with_cuda and cuda_version:
+            _, message = validate_cuda_version(cuda_version, gpu)
+            logger.debug(f"CUDA compatibility: {message}")
+
     if driver_range.is_eol and driver_version is None:
         driver_version = driver_range.max_version
         logger.info(f"Using EOL driver version: {driver_version}")
@@ -1446,7 +1701,7 @@ def install_driver_cli(
         )
 
     state = detect_driver_state(gpu, driver_range, distro.id)
-    selected = show_driver_options(state)
+    selected = show_driver_options(state, distro.id)
 
     if selected == -1:
         return 0
@@ -1454,7 +1709,14 @@ def install_driver_cli(
     option = next(opt for opt in state.options if opt.number == selected)
 
     return execute_driver_change(
-        option, state, distro, gpu, driver_range, dry_run=False
+        option,
+        state,
+        distro,
+        gpu,
+        driver_range,
+        dry_run=False,
+        with_cuda=with_cuda,
+        cuda_version=cuda_version,
     )
 
 
@@ -1815,6 +2077,7 @@ def main() -> int:
         cuda_version=args.cuda_version,
         skip_confirmation=args.yes,
         dry_run=args.dry_run,
+        ignore_compatibility=args.ignore_compatibility,
     )
 
 
