@@ -29,7 +29,12 @@ Cross-distribution Linux script for installing the latest compatible Nvidia driv
 - **Safety Checks**: Pre and post-installation validation
 - **Multiple Interfaces**: CLI, Tkinter GUI, and Zenity GUI support
 - **Dry-Run Mode**: Test installation without making changes
-- **Revert to Nouveau**: Switch from proprietary driver to open-source Nouveau
+- **Interactive Driver Selection**: Choose between proprietary, NVIDIA Open, and Nouveau drivers
+- **CUDA Awareness**: Shows CUDA support information in driver options
+- **Driver State Detection**: Automatically detects current driver state (Proprietary/NVIDIA Open/Nouveau)
+- **Non-Free Repository Detection**: Warns if non-free repos need to be enabled
+- **Root Privilege Management**: Caches sudo credentials for smooth workflow
+- **Graceful Cancellation**: Ctrl+C handling with clean exit
 
 ## Supported Distributions
 
@@ -143,6 +148,65 @@ Options:
   --debug                Enable debug logging
 ```
 
+## Driver Options
+
+nvidia-inst supports three driver types with CUDA-aware installation options:
+
+### Driver Types
+
+| Driver | Description | CUDA Support | Package Types |
+|--------|-------------|-------------|--------------|
+| **Proprietary** | NVIDIA's closed-source driver | Full CUDA support | `nvidia-driver-*`, `akmod-nvidia` |
+| **NVIDIA Open** | Open kernel modules (Turing+) | Full CUDA support | `nvidia-driver-*-open`, `nvidia-open` |
+| **Nouveau** | Open-source Xorg driver | No CUDA support | `xserver-xorg-video-nouveau` |
+
+### Menu Options
+
+Depending on your current driver state and GPU, you'll see relevant options:
+
+**No driver installed (repos enabled):**
+```
+Options:
+  [1] Install proprietary driver (CUDA 11.0-12.8) [RECOMMENDED]
+  [2] Install NVIDIA Open (CUDA 11.0-12.8)
+  [3] Install Nouveau (open-source, no CUDA support)
+  [4] Cancel
+```
+
+**Proprietary driver working optimally:**
+```
+Options:
+  [1] Upgrade to latest [RECOMMENDED]
+  [2] Keep current driver
+  [3] Switch to NVIDIA Open (CUDA 11.0-12.8)
+  [4] Switch to Nouveau (open-source, no CUDA support)
+  [5] Cancel
+```
+
+**Proprietary driver installed but non-free repos not enabled:**
+```
+Options:
+  [1] Enable non-free repos + install proprietary (CUDA 11.0-12.8) [RECOMMENDED]
+  [2] Enable non-free repos + install NVIDIA Open (CUDA 11.0-12.8)
+  [3] Install Nouveau (open-source, no CUDA support)
+  [4] Cancel
+```
+
+### CUDA Support Indication
+
+Options show CUDA version ranges when available:
+- `(CUDA 11.0-12.8)` - Full CUDA support
+- `(no CUDA support)` - Nouveau only
+
+### Distro-Specific Package Names
+
+| Distro | Proprietary | NVIDIA Open | Nouveau |
+|--------|-------------|------------|---------|
+| Ubuntu/Debian/Mint | `nvidia-driver-*` | `nvidia-driver-*-open` | `xserver-xorg-video-nouveau` |
+| Fedora/RHEL | `akmod-nvidia` | `xorg-x11-drv-nvidia-open` | `xorg-x11-drv-nouveau` |
+| Arch/Manjaro | `nvidia` | `nvidia-open` | `xf86-video-nouveau` |
+| openSUSE | `x11-video-nvidiaG0*` | `nvidia-open-driver-G06` | `xf86-video-nouveau` |
+
 ## Usage Examples
 
 ### Check Prerequisites
@@ -209,12 +273,32 @@ sudo nvidia-inst --revert-to-nouveau
 ```
 
 This will:
-1. Remove proprietary Nvidia driver packages
-2. Remove Nouveau blacklist
-3. Rebuild initramfs
-4. Enable Nouveau (open-source) driver
+1. Remove proprietary Nvidia driver packages (queries actual installed packages)
+2. Remove versionlock entries
+3. Remove Nouveau blacklist
+4. Rebuild initramfs
+5. Enable Nouveau (open-source) driver
 
 You will need to reboot after reverting.
+
+### Driver State Detection
+
+The installer automatically detects your current driver state:
+
+| State | Message | Available Options |
+|-------|---------|-------------------|
+| Proprietary Optimal | `NVIDIA driver X.Y.Z is working optimally` | Upgrade/Keep/NVIDIA Open/Nouveau |
+| Proprietary Wrong Branch | `Driver X.Y.Z may not be optimal` | Install correct/Keep/NVIDIA Open/Nouveau |
+| NVIDIA Open Active | `NVIDIA Open driver is active` | Upgrade/Keep/Proprietary/Nouveau |
+| Nouveau Active | `Nouveau (open-source) driver is active` | Proprietary/NVIDIA Open/Keep Nouveau |
+| No Driver | `No NVIDIA driver installed` | Install (with CUDA info)/Nouveau |
+| No Driver (repos missing) | `No NVIDIA driver installed (non-free repos not enabled)` | Enable repos + Install options |
+
+### Root Privilege Management
+
+- Scripts requests sudo access when needed
+- Credentials are cached for smooth multi-step operations
+- Works without root in `--dry-run` and `--check` modes
 
 ## Safety Features
 
@@ -222,8 +306,9 @@ You will need to reboot after reverting.
 - Disk space verification (500MB+ recommended)
 - Package availability in repositories
 - Kernel development packages
-- Secure Boot status
+- Secure Boot status and MOK enrollment
 - Running environment (tty vs GUI)
+- Non-free repository detection
 
 ### Post-Installation Validation
 - Verify packages installed
@@ -231,10 +316,21 @@ You will need to reboot after reverting.
 - Verify Nouveau blocking
 - Test nvidia-smi availability
 
+### Package Removal Safety
+- Queries actual installed packages before removal (no glob pattern issues)
+- DKMS cleanup before package removal
+- Versionlock cleanup for Fedora
+- APT preferences cleanup for Ubuntu/Debian
+
 ### Nouveau Handling
 - Prompts user before blocking Nouveau
 - If validation fails, automatically re-enables Nouveau to ensure bootable system
 - Clear instructions for manual fix if needed
+
+### Graceful Cancellation
+- Ctrl+C handling exits cleanly without traceback
+- Cancel option available in all menus
+- Partial operations can be safely interrupted
 
 ## Project Structure
 
