@@ -21,14 +21,17 @@ class TestDistroDetection:
     def test_detect_from_os_release_ubuntu(self, mock_exists, mock_read_text):
         """Test detection from /etc/os-release for Ubuntu."""
         mock_exists.return_value = True
-        mock_read_text.return_value = '''NAME="Ubuntu"
+        mock_read_text.return_value = """NAME="Ubuntu"
 VERSION="22.04.3 LTS (Jammy Jellyfish)"
 ID=ubuntu
 VERSION_ID="22.04"
 PRETTY_NAME="Ubuntu 22.04.3 LTS"
-'''
+"""
 
-        with patch("nvidia_inst.distro.detector._get_kernel_version", return_value="5.15.0-91-generic"):
+        with patch(
+            "nvidia_inst.distro.detector._get_kernel_version",
+            return_value="5.15.0-91-generic",
+        ):
             distro = detect_distro()
 
         assert distro.id == "ubuntu"
@@ -40,14 +43,17 @@ PRETTY_NAME="Ubuntu 22.04.3 LTS"
     def test_detect_from_os_release_fedora(self, mock_exists, mock_read_text):
         """Test detection from /etc/os-release for Fedora."""
         mock_exists.return_value = True
-        mock_read_text.return_value = '''NAME="Fedora Linux"
+        mock_read_text.return_value = """NAME="Fedora Linux"
 VERSION="38 (Workstation Edition)"
 ID=fedora
 VERSION_ID="38"
 PRETTY_NAME="Fedora Linux 38 (Workstation Edition)"
-'''
+"""
 
-        with patch("nvidia_inst.distro.detector._get_kernel_version", return_value="6.2.9-300.fc38.x86_64"):
+        with patch(
+            "nvidia_inst.distro.detector._get_kernel_version",
+            return_value="6.2.9-300.fc38.x86_64",
+        ):
             distro = detect_distro()
 
         assert distro.id == "fedora"
@@ -143,41 +149,67 @@ class TestDistroDetectionHelpers:
 
 
 class TestPackageManager:
-    """Test package manager detection."""
+    """Test package manager detection (tool-based)."""
 
-    @patch("nvidia_inst.distro.factory.is_debian")
-    @patch("nvidia_inst.distro.factory.is_ubuntu")
-    def test_get_package_manager_apt(self, mock_is_ubuntu, mock_is_debian):
+    @patch("nvidia_inst.distro.factory.detect_package_tool")
+    def test_get_package_manager_apt(self, mock_detect_tool):
         """Test getting APT package manager."""
-        mock_is_ubuntu.return_value = True
-        mock_is_debian.return_value = False
+        mock_detect_tool.return_value = "apt"
         pm = get_package_manager()
         assert pm.__class__.__name__ == "AptManager"
 
-    @patch("nvidia_inst.distro.factory.is_ubuntu")
-    @patch("nvidia_inst.distro.factory.is_arch")
-    @patch("nvidia_inst.distro.factory.is_debian")
-    @patch("nvidia_inst.distro.factory.is_fedora")
-    def test_get_package_manager_dnf(self, mock_is_fedora, mock_is_debian, mock_is_arch, mock_is_ubuntu):
+    @patch("nvidia_inst.distro.factory.detect_package_tool")
+    def test_get_package_manager_dnf(self, mock_detect_tool):
         """Test getting DNF package manager."""
-        mock_is_ubuntu.return_value = False
-        mock_is_fedora.return_value = True
-        mock_is_debian.return_value = False
-        mock_is_arch.return_value = False
+        mock_detect_tool.return_value = "dnf"
         pm = get_package_manager()
         assert pm.__class__.__name__ == "DnfManager"
 
-    @patch("nvidia_inst.distro.factory.is_ubuntu")
-    @patch("nvidia_inst.distro.factory.is_opensuse")
-    @patch("nvidia_inst.distro.factory.is_fedora")
-    @patch("nvidia_inst.distro.factory.is_debian")
-    @patch("nvidia_inst.distro.factory.is_arch")
-    def test_get_package_manager_pacman(self, mock_is_arch, mock_is_debian, mock_is_fedora, mock_is_opensuse, mock_is_ubuntu):
+    @patch("nvidia_inst.distro.factory.detect_package_tool")
+    def test_get_package_manager_dnf5(self, mock_detect_tool):
+        """Test getting DNF5 package manager."""
+        mock_detect_tool.return_value = "dnf5"
+        pm = get_package_manager()
+        assert pm.__class__.__name__ == "DnfManager"
+
+    @patch("nvidia_inst.distro.factory.detect_package_tool")
+    def test_get_package_manager_pacman(self, mock_detect_tool):
         """Test getting Pacman package manager."""
-        mock_is_ubuntu.return_value = False
-        mock_is_arch.return_value = True
-        mock_is_debian.return_value = False
-        mock_is_fedora.return_value = False
-        mock_is_opensuse.return_value = False
+        mock_detect_tool.return_value = "pacman"
         pm = get_package_manager()
         assert pm.__class__.__name__ == "PacmanManager"
+
+    @patch("nvidia_inst.distro.factory.detect_package_tool")
+    def test_get_package_manager_zypper(self, mock_detect_tool):
+        """Test getting Zypper package manager."""
+        mock_detect_tool.return_value = "zypper"
+        pm = get_package_manager()
+        assert pm.__class__.__name__ == "ZypperManager"
+
+    @patch("nvidia_inst.distro.factory.detect_package_tool")
+    def test_get_package_manager_pamac(self, mock_detect_tool):
+        """Test getting Pacman manager for pamac (Arch GUI)."""
+        mock_detect_tool.return_value = "pamac"
+        pm = get_package_manager()
+        assert pm.__class__.__name__ == "PacmanManager"
+
+    @patch("nvidia_inst.distro.factory.detect_package_tool")
+    def test_get_package_manager_paru(self, mock_detect_tool):
+        """Test getting Pacman manager for paru (AUR helper)."""
+        mock_detect_tool.return_value = "paru"
+        pm = get_package_manager()
+        assert pm.__class__.__name__ == "PacmanManager"
+
+    @patch("nvidia_inst.distro.factory.detect_package_tool")
+    def test_get_package_manager_yay(self, mock_detect_tool):
+        """Test getting Pacman manager for yay (AUR helper)."""
+        mock_detect_tool.return_value = "yay"
+        pm = get_package_manager()
+        assert pm.__class__.__name__ == "PacmanManager"
+
+    @patch("nvidia_inst.distro.factory.detect_package_tool")
+    def test_get_package_manager_none(self, mock_detect_tool):
+        """Test error when no package manager found."""
+        mock_detect_tool.return_value = None
+        with __import__("pytest").raises(RuntimeError):
+            get_package_manager()

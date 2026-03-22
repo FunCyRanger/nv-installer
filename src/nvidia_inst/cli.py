@@ -5,7 +5,10 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from nvidia_inst.distro.tools import PackageContext
 
 from nvidia_inst.distro.detector import (
     DistroDetectionError,
@@ -1227,6 +1230,92 @@ def _dry_run_change(
             step += 1
         print(f"  {step}. sudo mkinitcpio -P")
         step += 1
+    print(f"  {step}. sudo reboot")
+
+    print("\nOr run this script without --dry-run:")
+    print("  sudo nvidia-inst")
+
+
+def _dry_run_change_tool_based(
+    state: DriverState,
+    packages: list[str],
+    distro: DistroInfo,
+    ctx: "PackageContext",
+    with_cuda: bool = True,
+    cuda_version: str | None = None,
+) -> None:
+    """Show dry-run output using tool-based detection.
+
+    This function provides flexible dry-run output that works with any
+    distro using supported package management tools.
+    """
+    from nvidia_inst.distro.tools import (
+        get_install_command,
+        get_remove_command,
+        get_update_command,
+    )
+    from nvidia_inst.installer.cuda import get_cuda_packages_tool_based
+
+    print("\n" + "=" * 50)
+    print(" DRY-RUN MODE (Tool-Based)")
+    print("=" * 50)
+
+    print(f"\nCurrent state: {state.message}")
+    if state.current_version:
+        print(f"  Installed: {state.current_version}")
+
+    print(f"\nPackage tool: {ctx.tool}")
+    print(f"Package family: {ctx.distro_family}")
+    print(f"Target packages: {' '.join(packages)}")
+
+    # CUDA packages
+    cuda_pkgs = []
+    if with_cuda:
+        cuda_pkgs = get_cuda_packages_tool_based(ctx, cuda_version)
+        if cuda_pkgs:
+            print(f"Target CUDA packages: {' '.join(cuda_pkgs)}")
+
+    print("\nSteps to execute manually:")
+    step = 1
+
+    # Remove existing packages if needed
+    if state.current_version or state.status == DriverStatus.NOUVEAU_ACTIVE:
+        remove_cmd = get_remove_command(ctx.tool)
+        print(f"  {step}. sudo {' '.join(remove_cmd)} nvidia-driver* nvidia-dkms*")
+        step += 1
+
+    # Update package lists
+    update_cmd = get_update_command(ctx.tool)
+    print(f"  {step}. sudo {' '.join(update_cmd)}")
+    step += 1
+
+    # Install driver packages
+    install_cmd = get_install_command(ctx.tool)
+    print(f"  {step}. sudo {' '.join(install_cmd)} {' '.join(packages)}")
+    step += 1
+
+    # Install CUDA packages
+    if cuda_pkgs:
+        print(f"  {step}. sudo {' '.join(install_cmd)} {' '.join(cuda_pkgs)}")
+        step += 1
+
+    # Rebuild initramfs
+    initramfs_cmds = {
+        "apt": "update-initramfs -u",
+        "apt-get": "update-initramfs -u",
+        "dnf": "dracut -f --regenerate-all",
+        "dnf5": "dracut -f --regenerate-all",
+        "yum": "dracut -f --regenerate-all",
+        "pacman": "mkinitcpio -P",
+        "pamac": "mkinitcpio -P",
+        "paru": "mkinitcpio -P",
+        "yay": "mkinitcpio -P",
+        "zypper": "dracut -f --regenerate-all",
+    }
+    initramfs = initramfs_cmds.get(ctx.tool, "update-initramfs -u")
+    print(f"  {step}. sudo {initramfs}")
+    step += 1
+
     print(f"  {step}. sudo reboot")
 
     print("\nOr run this script without --dry-run:")

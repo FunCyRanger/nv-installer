@@ -426,8 +426,155 @@ def check_cuda_driver_compatibility(
         return True, "Unable to validate compatibility"
 
 
-# Type import for PackageManager (avoiding circular import)
+# ============================================================================
+# Tool-Based Functions (New Approach)
+# ============================================================================
+
+
+def get_cuda_packages_tool_based(
+    ctx: "PackageContext",
+    version: str | None = None,
+) -> list[str]:
+    """Get CUDA packages using tool-based detection.
+
+    Args:
+        ctx: Package context with tool and family info
+        version: CUDA version (e.g., "12.2")
+
+    Returns:
+        List of package names.
+    """
+    from nvidia_inst.distro.packages import get_cuda_packages
+
+    if version is None:
+        return _get_default_cuda_packages(ctx.tool)
+
+    return get_cuda_packages(ctx, version)
+
+
+def get_uninstall_cuda_packages_tool_based(
+    ctx: "PackageContext",
+    cuda_version: str | None = None,
+) -> list[str]:
+    """Get packages to remove using tool-based detection.
+
+    Args:
+        ctx: Package context
+        cuda_version: Specific CUDA version to remove, or None for all
+
+    Returns:
+        List of package patterns to remove.
+    """
+    tool = ctx.tool
+
+    if tool in ("apt", "apt-get"):
+        if cuda_version:
+            return [f"cuda-{cuda_version}*", f"cuda-toolkit-{cuda_version}*"]
+        return ["cuda-*", "cuda-toolkit-*", "nvidia-cuda*"]
+    elif tool in ("dnf", "dnf5", "yum"):
+        if cuda_version:
+            return [f"cuda-toolkit-{cuda_version}*", f"cuda-devel-{cuda_version}*"]
+        return ["cuda-toolkit*", "cuda-runtime*", "cuda-devel*"]
+    elif tool in ("pacman", "pamac", "paru", "yay", "trizen"):
+        if cuda_version:
+            return [f"cuda-{cuda_version}*"]
+        return ["cuda*"]
+    elif tool == "zypper":
+        if cuda_version:
+            return [f"cuda-{cuda_version}*"]
+        return ["cuda*"]
+
+    return []
+
+
+def pin_cuda_to_major_version_tool_based(
+    ctx: "PackageContext",
+    major_version: str,
+    pkg_manager: "PackageManager",
+) -> bool:
+    """Pin CUDA packages to a major version using tool-based detection.
+
+    Args:
+        ctx: Package context
+        major_version: Major version to pin (e.g., "12")
+        pkg_manager: Package manager instance
+
+    Returns:
+        True if pinning succeeded.
+    """
+    from nvidia_inst.distro.packages import get_cuda_major_packages
+
+    packages = get_cuda_major_packages(ctx, major_version)
+    pattern = f"{major_version}.*"
+
+    pinned = True
+    for pkg in packages:
+        try:
+            if not pkg_manager.pin_version(pkg, pattern):
+                logger.warning(f"Failed to pin {pkg} to {pattern}")
+                pinned = False
+            else:
+                logger.info(f"Pinned {pkg} to {pattern}")
+        except Exception as e:
+            logger.warning(f"Error pinning {pkg}: {e}")
+            pinned = False
+
+    return pinned
+
+
+def _get_default_cuda_packages(tool: str) -> list[str]:
+    """Get default CUDA packages for a tool.
+
+    Args:
+        tool: Package manager tool name
+
+    Returns:
+        List of default package names.
+    """
+    defaults: dict[str, list[str]] = {
+        "apt": ["cuda", "cuda-toolkit"],
+        "apt-get": ["cuda", "cuda-toolkit"],
+        "dnf": ["cuda-toolkit"],
+        "dnf5": ["cuda-toolkit"],
+        "yum": ["cuda-toolkit"],
+        "pacman": ["cuda"],
+        "pamac": ["cuda"],
+        "paru": ["cuda"],
+        "yay": ["cuda"],
+        "trizen": ["cuda"],
+        "zypper": ["cuda"],
+    }
+    return defaults.get(tool, ["cuda"])
+
+
+def get_cuda_installer_tool_based(ctx: "PackageContext") -> CUDAInstaller:
+    """Get CUDA installer using tool-based detection.
+
+    Args:
+        ctx: Package context
+
+    Returns:
+        CUDAInstaller instance appropriate for the tool.
+    """
+    family = ctx.distro_family
+
+    if family == "debian":
+        return UbuntuCUDAInstaller()
+    elif family == "fedora":
+        return FedoraCUDAInstaller()
+    elif family == "arch":
+        return ArchCUDAInstaller()
+    elif family == "suse":
+        return UbuntuCUDAInstaller()  # Uses similar package names
+
+    # Fallback
+    logger.warning(f"Unknown family {family}, using Ubuntu installer")
+    return UbuntuCUDAInstaller()
+
+
+# Type imports for type hints (avoiding circular import)
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from nvidia_inst.distro.package_manager import PackageManager
+    from nvidia_inst.distro.tools import PackageContext
