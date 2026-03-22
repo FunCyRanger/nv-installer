@@ -1823,138 +1823,398 @@ def _run_dry_run(
     with_cuda: bool,
     cuda_version: str | None,
 ) -> int:
-    """Run in dry-run mode to show what would be installed."""
+    """Run in dry-run mode with compact table format."""
     from nvidia_inst.distro.factory import get_package_manager
-    from nvidia_inst.installer.driver import get_compatible_driver_packages
+    from nvidia_inst.installer.driver import (
+        get_compatible_driver_packages,
+        check_nouveau,
+    )
+    from nvidia_inst.installer.cuda import detect_installed_cuda_version
 
-    print("\n" + "=" * 50)
-    print(" SIMULATION MODE - No changes will be made")
-    print("=" * 50)
-
-    print("\n--- System Information ---")
-    print(f"Distribution: {distro}")
-    print(f"GPU: {gpu.model}")
-    if gpu.compute_capability:
-        print(f"Compute Capability: {gpu.compute_capability}")
-    print(f"Driver Range: {driver_range.min_version}", end="")
-    if driver_range.max_version:
-        print(f" - {driver_range.max_version}")
-    else:
-        print(" or later")
-
-    print("\n--- Prerequisites Check ---")
-    check_prerequisites(distro.id, distro.version_id, driver_range)
-
-    print("\n--- Pre-install Checks ---")
-
-    from nvidia_inst.installer.driver import check_nouveau
-
+    # Detect system state
+    installed_cuda = detect_installed_cuda_version()
     nouveau_loaded = check_nouveau()
-    if nouveau_loaded:
-        print("[ ] Nouveau kernel module - NEEDS TO BE DISABLED")
-    else:
-        print("[x] Nouveau kernel module - Not loaded")
-
     sb_enabled = check_secure_boot()
-    if sb_enabled:
-        print("[ ] Secure Boot - NEEDS ATTENTION")
-    else:
-        print("[x] Secure Boot - Disabled")
-
-    print("\n--- Installation Plan ---")
-
     pkg_manager = get_package_manager()
     packages = get_compatible_driver_packages(distro.id, driver_range)
 
-    if driver_version:
-        print(f"Requested driver version: {driver_version}")
-    elif driver_range.max_branch:
-        if driver_range.is_eol:
-            print(f"Selected driver version (EOL): {driver_range.max_version}")
-        else:
-            print(
-                f"Selected driver branch: {driver_range.max_branch}.xx (current max: {driver_range.max_version})"
-            )
-            print(
-                f"  -> Will receive branch updates (e.g., {driver_range.max_branch}.143, {driver_range.max_branch}.144)"
-            )
-    else:
-        print("Selected driver version: Latest (590.xx)")
+    # Auto-select CUDA if locked and not specified
+    if with_cuda and cuda_version is None and driver_range.cuda_is_locked:
+        if driver_range.cuda_locked_major:
+            cuda_version = f"{driver_range.cuda_locked_major}.0"
+        elif driver_range.cuda_max:
+            cuda_version = driver_range.cuda_max
 
-    print(f"\nPackage manager: {pkg_manager.__class__.__name__}")
-
-    print("\nDriver packages to install:")
-    for pkg in packages:
-        print(f"  - {pkg}")
-
+    # Get CUDA packages
+    cuda_pkgs = []
     if with_cuda:
-        print("\nCUDA packages to install:")
         cuda_installer = _get_cuda_installer(distro.id)
         cuda_pkgs = cuda_installer.get_cuda_packages(cuda_version)
-        for pkg in cuda_pkgs:
-            print(f"  - {pkg}")
 
-    print("\n--- Commands to Execute ---")
-
-    print("# Step 1: Update package lists:")
-    if distro.id in ("ubuntu", "debian"):
-        print("  sudo apt update")
-    elif distro.id in ("fedora", "rhel", "centos"):
-        print("  sudo dnf makecache")
-    elif distro.id in ("arch", "manjaro"):
-        print("  sudo pacman -Sy")
-    elif distro.id in ("opensuse"):
-        print("  sudo zypper refresh")
-
-    if driver_range.max_branch and driver_range.is_limited:
-        print(
-            "\n# Step 2: Lock driver to correct branch (prevents incompatible drivers):"
-        )
-        if distro.id in ("fedora", "rhel", "centos"):
-            print(
-                f"  sudo dnf versionlock add --raw 'akmod-nvidia-{driver_range.max_branch}.*'"
+    # Check for incompatible installed CUDA
+    cuda_warnings = []
+    if (
+        installed_cuda
+        and driver_range.cuda_is_locked
+        and driver_range.cuda_locked_major
+    ):
+        installed_major = installed_cuda.split(".")[0]
+        if installed_major != driver_range.cuda_locked_major:
+            cuda_warnings.append(
+                f"Existing CUDA {installed_cuda} is INCOMPATIBLE (locked to {driver_range.cuda_locked_major}.x)"
             )
-        elif distro.id in ("ubuntu", "debian"):
-            print("  # Add to /etc/apt/preferences.d/nvidia:")
-            print(
-                f"  echo 'Package: nvidia-driver-*\nPin: version {driver_range.max_branch}.*\nPin-Priority: 1001' | sudo tee /etc/apt/preferences.d/nvidia"
-            )
-        elif distro.id in ("arch", "manjaro"):
-            print("  # Lock current branch package:")
-            print(f"  sudo pacman -D --lock nvidia-{driver_range.max_branch}xx")
-        elif distro.id in ("opensuse"):
-            print("  sudo zypper addlock x11-video-nvidiaG05")
 
-    print("\n# Step 3: Install driver packages:")
-    if distro.id in ("ubuntu", "debian"):
-        cmd = f"  sudo apt install -y {' '.join(packages)}"
-        print(cmd)
-    elif distro.id in ("fedora", "rhel", "centos"):
-        cmd = f"  sudo dnf install -y {' '.join(packages)}"
-        print(cmd)
-    elif distro.id in ("arch", "manjaro"):
-        cmd = f"  sudo pacman -S --noconfirm {' '.join(packages)}"
-        print(cmd)
-    elif distro.id in ("opensuse"):
-        cmd = f"  sudo zypper install -y {' '.join(packages)}"
-        print(cmd)
+    # Print output
+    print("\n╔════════════════════════════════════════════════════════════════╗")
+    print("║  NVIDIA Driver Installation - Dry Run Mode                    ║")
+    print("╚════════════════════════════════════════════════════════════════╝")
 
-    print("\n# Step 4: Rebuild initramfs:")
-    if distro.id in ("fedora", "rhel", "centos", "opensuse", "sles"):
-        print("  sudo dracut -f --regenerate-all")
-    elif distro.id in ("arch", "manjaro"):
-        print("  sudo mkinitcpio -P")
+    # DETECTED SYSTEM
+    print("\n┌─── DETECTED SYSTEM ───────────────────────────────────────────┐")
+
+    _print_row("Distribution", str(distro), 20)
+    _print_row("Kernel", _get_kernel_version(), 20)
+    _print_row("GPU", gpu.model, 20)
+    if gpu.compute_capability:
+        _print_row("Compute Cap.", str(gpu.compute_capability), 20)
+
+    # Package manager info
+    tool = _detect_tool_name()
+    _print_row(
+        "Package Manager", f"{pkg_manager.__class__.__name__} ({tool})", 20, last=True
+    )
+
+    # INSTALLED SOFTWARE
+    print("\n┌─── INSTALLED SOFTWARE ────────────────────────────────────────┐")
+    _print_row("Driver", _get_installed_driver_version() or "None", 20)
+    _print_row("CUDA", installed_cuda or "None", 20, last=True)
+
+    # COMPATIBILITY
+    print("\n┌─── COMPATIBILITY ─────────────────────────────────────────────┐")
+
+    # Driver range
+    if driver_range.max_branch:
+        if driver_range.is_eol:
+            driver_info = f"{driver_range.max_version} (EOL)"
+        else:
+            driver_info = f"{driver_range.min_version} - {driver_range.max_version} (branch {driver_range.max_branch})"
     else:
-        print("  sudo update-initramfs -u")
+        driver_info = (
+            f"{driver_range.min_version} - {driver_range.max_version or 'latest'}"
+        )
+    _print_row("Driver Range", driver_info, 20)
 
-    print("\n# Step 5: Reboot:")
-    print("  sudo reboot")
+    # CUDA range
+    cuda_info = f"{driver_range.cuda_min}"
+    if driver_range.cuda_max:
+        cuda_info += f" - {driver_range.cuda_max}"
+    if driver_range.cuda_is_locked:
+        if driver_range.cuda_locked_major:
+            cuda_info += f" (locked to {driver_range.cuda_locked_major}.x)"
+        else:
+            cuda_info += " (locked)"
+    _print_row("CUDA Range", cuda_info, 20)
 
-    print("\n" + "=" * 50)
-    print(" Dry-run complete. Run without --dry-run to install.")
-    print("=" * 50 + "\n")
+    # GPU status
+    if driver_range.is_eol:
+        status = "End-of-life (security updates only)"
+    elif driver_range.is_limited:
+        status = "Limited support"
+    else:
+        status = "Full support"
+    _print_row("GPU Status", status, 20, last=True)
+
+    # CHECKS
+    print("\n┌─── PRE-INSTALL CHECKS ───────────────────────────────────────┐")
+    _print_row(
+        "Nouveau", "[ ] Disabled - REQUIRED" if nouveau_loaded else "[x] Not loaded", 20
+    )
+    _print_row(
+        "Secure Boot",
+        "[ ] Enabled - needs attention" if sb_enabled else "[x] Disabled",
+        20,
+    )
+    _print_row(
+        "CUDA Repo",
+        _check_cuda_repo_status(distro.id, distro.version_id),
+        20,
+        last=True,
+    )
+
+    # WARNINGS
+    if cuda_warnings or nouveau_loaded or sb_enabled:
+        print("\n┌─── WARNINGS ──────────────────────────────────────────────────┐")
+        if nouveau_loaded:
+            print("│  ⚠  Nouveau kernel module must be disabled before install    │")
+        if sb_enabled:
+            print("│  ⚠  Secure Boot is enabled - may require MOK key enrollment  │")
+        for warning in cuda_warnings:
+            print(f"│  ⚠  {warning:<58}│")
+        print("└────────────────────────────────────────────────────────────────┘")
+
+    # PLANNED CHANGES
+    print("\n┌─── PLANNED CHANGES ───────────────────────────────────────────┐")
+
+    # Action summary
+    if nouveau_loaded:
+        _print_row("Action", "Disable Nouveau + Install", 20)
+    elif driver_range.is_eol or _has_installed_driver():
+        _print_row("Action", "Update/Replace driver", 20)
+    else:
+        _print_row("Action", "Fresh install", 20)
+
+    # Driver
+    if driver_version:
+        driver_action = f"Install {driver_version}"
+    elif driver_range.is_eol:
+        driver_action = f"Install {driver_range.max_version} (EOL)"
+    elif driver_range.max_branch:
+        driver_action = f"Install {driver_range.max_branch}.xx (branch)"
+    else:
+        driver_action = "Install latest"
+    _print_row("Driver", driver_action, 20)
+
+    # CUDA
+    if with_cuda:
+        if cuda_warnings:
+            cuda_action = f"Install {cuda_version} (replaces {installed_cuda})"
+        elif driver_range.cuda_is_locked:
+            cuda_action = f"Install {cuda_version} (locked)"
+        else:
+            cuda_action = f"Install {cuda_version or 'latest'}"
+    else:
+        cuda_action = "Skip"
+    _print_row("CUDA", cuda_action, 20)
+
+    # Locks
+    locks = []
+    if driver_range.max_branch and driver_range.is_limited:
+        locks.append(f"driver to {driver_range.max_branch}.*")
+    if driver_range.cuda_is_locked and driver_range.cuda_locked_major:
+        locks.append(f"CUDA to {driver_range.cuda_locked_major}.*")
+    if locks:
+        _print_row("Locks", ", ".join(locks), 20)
+
+    # Remove
+    remove = []
+    if _has_installed_driver():
+        remove.append("old driver")
+    if cuda_warnings:
+        remove.append(f"CUDA {installed_cuda}")
+    if remove:
+        _print_row("Remove", ", ".join(remove), 20, last=True)
+    else:
+        print("└────────────────────────────────────────────────────────────────┘")
+
+    # PACKAGES
+    print("\n┌─── PACKAGES ──────────────────────────────────────────────────┐")
+    _print_row(
+        "Driver", " ".join(packages[:3]) + (" ..." if len(packages) > 3 else ""), 20
+    )
+    if cuda_pkgs:
+        _print_row("CUDA", " ".join(cuda_pkgs), 20, last=True)
+    else:
+        _print_row("CUDA", "(none)", 20, last=True)
+
+    # COMMANDS
+    print("\n┌─── COMMANDS ──────────────────────────────────────────────────┐")
+    step = 1
+
+    # Step 1: Update
+    update_cmd = _get_update_command(distro.id)
+    print(f"│  {step}. {update_cmd:<56} │")
+    step += 1
+
+    # Step 1b: Remove if needed
+    if nouveau_loaded:
+        remove_cmd = _get_nouveau_remove_command(distro.id)
+        print(f"│  {step}. {remove_cmd:<56} │")
+        step += 1
+
+    # Step 2: Lock driver (if limited)
+    if driver_range.max_branch and driver_range.is_limited:
+        lock_cmd = _get_driver_lock_command(distro.id, driver_range.max_branch)
+        print(f"│  {step}. {lock_cmd:<56} │")
+        step += 1
+
+    # Step 3: Install driver
+    install_cmd = _get_install_command(distro.id, packages)
+    print(f"│  {step}. {install_cmd:<56} │")
+    step += 1
+
+    # Step 4: Install CUDA
+    if cuda_pkgs:
+        cuda_install_cmd = _get_install_command(distro.id, cuda_pkgs)
+        print(f"│  {step}. {cuda_install_cmd:<56} │")
+        step += 1
+
+    # Step 4b: Lock CUDA (if locked)
+    if driver_range.cuda_is_locked and driver_range.cuda_locked_major:
+        cuda_lock_cmd = _get_cuda_lock_command(
+            distro.id, driver_range.cuda_locked_major
+        )
+        print(f"│  {step}. {cuda_lock_cmd:<56} │")
+        step += 1
+
+    # Step 5: Initramfs
+    initramfs_cmd = _get_initramfs_command(distro.id)
+    print(f"│  {step}. {initramfs_cmd:<56} │")
+    step += 1
+
+    # Step 6: Reboot
+    print(f"│  {step}. sudo reboot                                                   │")
+    print("└────────────────────────────────────────────────────────────────┘")
+
+    print("\n" + "=" * 64)
+    print("  Dry-run complete. Run without --dry-run to install.")
+    print("=" * 64 + "\n")
 
     return 0
+
+
+def _print_row(
+    label: str, value: str, label_width: int = 20, last: bool = False
+) -> None:
+    """Print a single row in the compact table format."""
+    print(f"│  {label:<{label_width}} │ {value:<40} │")
+    if last:
+        print("└────────────────────────────────────────────────────────────────┘")
+
+
+def _get_kernel_version() -> str:
+    """Get current kernel version."""
+    import subprocess
+
+    try:
+        result = subprocess.run(["uname", "-r"], capture_output=True, text=True)
+        return result.stdout.strip()
+    except Exception:
+        return "unknown"
+
+
+def _detect_tool_name() -> str:
+    """Detect package tool name."""
+    from nvidia_inst.distro.tools import detect_package_tool
+
+    return detect_package_tool() or "unknown"
+
+
+def _get_installed_driver_version() -> str | None:
+    """Get currently installed driver version."""
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip().split("\n")[0]
+    except Exception:
+        pass
+    return None
+
+
+def _has_installed_driver() -> bool:
+    """Check if NVIDIA driver is installed."""
+    return _get_installed_driver_version() is not None
+
+
+def _check_cuda_repo_status(distro_id: str, version_id: str) -> str:
+    """Check CUDA repository status."""
+    try:
+        from nvidia_inst.installer.prerequisites import PrerequisitesChecker
+
+        checker = PrerequisitesChecker()
+        fix_commands = checker.get_cuda_repo_fix_commands(distro_id, version_id)
+        if fix_commands:
+            return "[ ] Not configured"
+        return "[x] Configured"
+    except Exception:
+        return "[?] Unknown"
+
+
+def _get_update_command(distro_id: str) -> str:
+    """Get package update command."""
+    commands = {
+        "ubuntu": "sudo apt update",
+        "debian": "sudo apt update",
+        "fedora": "sudo dnf makecache",
+        "rhel": "sudo dnf makecache",
+        "centos": "sudo dnf makecache",
+        "arch": "sudo pacman -Sy",
+        "manjaro": "sudo pacman -Sy",
+        "opensuse": "sudo zypper refresh",
+    }
+    return commands.get(distro_id, "sudo apt update")
+
+
+def _get_nouveau_remove_command(distro_id: str) -> str:
+    """Get command to remove nouveau."""
+    commands = {
+        "ubuntu": "sudo apt remove -y xserver-xorg-video-nouveau",
+        "debian": "sudo apt remove -y xserver-xorg-video-nouveau",
+        "fedora": "sudo dnf remove -y xorg-x11-drv-nouveau",
+        "arch": "sudo pacman -Rns --noconfirm xf86-video-nouveau",
+        "opensuse": "sudo zypper remove -y xf86-video-nouveau",
+    }
+    return commands.get(distro_id, "sudo apt remove -y xserver-xorg-video-nouveau")
+
+
+def _get_driver_lock_command(distro_id: str, branch: str) -> str:
+    """Get command to lock driver to branch."""
+    commands = {
+        "ubuntu": f"echo 'Pin: version {branch}.*' | sudo tee -a /etc/apt/preferences.d/nvidia",
+        "debian": f"echo 'Pin: version {branch}.*' | sudo tee -a /etc/apt/preferences.d/nvidia",
+        "fedora": f"sudo dnf versionlock add --raw 'akmod-nvidia-{branch}.*'",
+        "arch": f"sudo pacman -D --lock nvidia-{branch}xx",
+        "opensuse": f"sudo zypper addlock x11-video-nvidiaG05",
+    }
+    return commands.get(distro_id, f"# Lock to branch {branch}")
+
+
+def _get_cuda_lock_command(distro_id: str, major: str) -> str:
+    """Get command to lock CUDA to major version."""
+    commands = {
+        "ubuntu": f"echo 'Pin: version {major}.*' | sudo tee -a /etc/apt/preferences.d/cuda",
+        "debian": f"echo 'Pin: version {major}.*' | sudo tee -a /etc/apt/preferences.d/cuda",
+        "fedora": f"sudo dnf versionlock add --raw 'cuda-toolkit-{major}.*'",
+        "arch": f"sudo pacman -D --lock cuda-{major}*",
+        "opensuse": f"sudo zypper addlock 'cuda-toolkit-{major}.*'",
+    }
+    return commands.get(distro_id, f"# Lock CUDA to {major}.*")
+
+
+def _get_install_command(distro_id: str, packages: list[str]) -> str:
+    """Get install command for packages."""
+    pkg_str = " ".join(packages[:3])
+    if len(packages) > 3:
+        pkg_str += " ..."
+    commands = {
+        "ubuntu": f"sudo apt install -y {pkg_str}",
+        "debian": f"sudo apt install -y {pkg_str}",
+        "fedora": f"sudo dnf install -y {pkg_str}",
+        "arch": f"sudo pacman -S --noconfirm {pkg_str}",
+        "opensuse": f"sudo zypper install -y {pkg_str}",
+    }
+    return commands.get(distro_id, f"sudo apt install -y {pkg_str}")
+
+
+def _get_initramfs_command(distro_id: str) -> str:
+    """Get initramfs rebuild command."""
+    commands = {
+        "ubuntu": "sudo update-initramfs -u",
+        "debian": "sudo update-initramfs -u",
+        "fedora": "sudo dracut -f --regenerate-all",
+        "rhel": "sudo dracut -f --regenerate-all",
+        "centos": "sudo dracut -f --regenerate-all",
+        "arch": "sudo mkinitcpio -P",
+        "manjaro": "sudo mkinitcpio -P",
+        "opensuse": "sudo dracut -f --regenerate-all",
+    }
+    return commands.get(distro_id, "sudo update-initramfs -u")
 
 
 def _get_wrong_branch(max_branch: str) -> str:
