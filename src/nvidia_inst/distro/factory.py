@@ -5,21 +5,14 @@ with any distro using supported package management tools.
 """
 
 from nvidia_inst.distro.apt import AptManager
+
+# Re-export distro detection functions for backward compatibility
 from nvidia_inst.distro.dnf import DnfManager
 from nvidia_inst.distro.package_manager import PackageManager
 from nvidia_inst.distro.pacman import PacmanManager
 from nvidia_inst.distro.tools import detect_package_tool, get_tool_family
 from nvidia_inst.distro.zypper import ZypperManager
 from nvidia_inst.utils.logger import get_logger
-
-# Re-export distro detection functions for backward compatibility
-from nvidia_inst.distro.detector import (
-    is_arch,
-    is_debian,
-    is_fedora,
-    is_opensuse,
-    is_ubuntu,
-)
 
 logger = get_logger(__name__)
 

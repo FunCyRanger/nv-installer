@@ -361,9 +361,7 @@ def get_cuda_packages_for_version(distro_id: str, cuda_version: str) -> list[str
         return [f"cuda-{cuda_version}", f"cuda-toolkit-{cuda_version}"]
     elif distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
         return [f"cuda-toolkit-{cuda_version}"]
-    elif distro_id in ("arch", "manjaro"):
-        return [f"cuda-{cuda_version}"]
-    elif distro_id in ("opensuse", "sles"):
+    elif distro_id in ("arch", "manjaro") or distro_id in ("opensuse", "sles"):
         return [f"cuda-{cuda_version}"]
     return []
 
@@ -388,11 +386,7 @@ def get_uninstall_cuda_packages(
         if cuda_version:
             return [f"cuda-toolkit-{cuda_version}*", f"cuda-devel-{cuda_version}*"]
         return ["cuda-toolkit*", "cuda-runtime*", "cuda-devel*"]
-    elif distro_id in ("arch", "manjaro"):
-        if cuda_version:
-            return [f"cuda-{cuda_version}*"]
-        return ["cuda*"]
-    elif distro_id in ("opensuse", "sles"):
+    elif distro_id in ("arch", "manjaro") or distro_id in ("opensuse", "sles"):
         if cuda_version:
             return [f"cuda-{cuda_version}*"]
         return ["cuda*"]
@@ -480,9 +474,7 @@ def _get_cuda_packages_for_pinning(distro_id: str, major_version: str) -> list[s
         return [f"cuda-{major_version}*", f"cuda-toolkit-{major_version}*"]
     elif distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
         return [f"cuda-toolkit-{major_version}*", f"cuda-runtime-{major_version}*"]
-    elif distro_id in ("arch", "manjaro"):
-        return [f"cuda-{major_version}*"]
-    elif distro_id in ("opensuse", "sles"):
+    elif distro_id in ("arch", "manjaro") or distro_id in ("opensuse", "sles"):
         return [f"cuda-{major_version}*"]
     return []
 
@@ -513,18 +505,16 @@ def check_cuda_driver_compatibility(
                     False,
                     f"CUDA {cuda_version} requires driver 525+, found {driver_version}",
                 )
-        elif cuda_major == 11:
-            if driver_major < 450:
-                return (
-                    False,
-                    f"CUDA {cuda_version} requires driver 450+, found {driver_version}",
-                )
-        elif cuda_major <= 10:
-            if driver_major < 410:
-                return (
-                    False,
-                    f"CUDA {cuda_version} requires driver 410+, found {driver_version}",
-                )
+        elif cuda_major == 11 and driver_major < 450:
+            return (
+                False,
+                f"CUDA {cuda_version} requires driver 450+, found {driver_version}",
+            )
+        elif cuda_major <= 10 and driver_major < 410:
+            return (
+                False,
+                f"CUDA {cuda_version} requires driver 410+, found {driver_version}",
+            )
 
         return True, f"CUDA {cuda_version} is compatible with driver {driver_version}"
     except (ValueError, IndexError):
@@ -580,11 +570,7 @@ def get_uninstall_cuda_packages_tool_based(
         if cuda_version:
             return [f"cuda-toolkit-{cuda_version}*", f"cuda-devel-{cuda_version}*"]
         return ["cuda-toolkit*", "cuda-runtime*", "cuda-devel*"]
-    elif tool in ("pacman", "pamac", "paru", "yay", "trizen"):
-        if cuda_version:
-            return [f"cuda-{cuda_version}*"]
-        return ["cuda*"]
-    elif tool == "zypper":
+    elif tool in ("pacman", "pamac", "paru", "yay", "trizen") or tool == "zypper":
         if cuda_version:
             return [f"cuda-{cuda_version}*"]
         return ["cuda*"]
@@ -678,7 +664,7 @@ def get_cuda_installer_tool_based(ctx: "PackageContext") -> CUDAInstaller:
 
 
 # Type imports for type hints (avoiding circular import)
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING  # noqa: E402
 
 if TYPE_CHECKING:
     from nvidia_inst.distro.package_manager import PackageManager

@@ -84,7 +84,6 @@ DISTRO_FAMILIES: dict[str, str] = {
     "alma": "fedora",
     "nobara": "fedora",
     "ultramarine": "fedora",
-    "nobara": "fedora",
     "boros": "fedora",
     # Arch family
     "arch": "arch",

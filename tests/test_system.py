@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 class TestParseCudaVersionFromPackage:
     """Test _parse_cuda_version_from_package function."""
