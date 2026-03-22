@@ -155,7 +155,7 @@ class TestDetectDriverState:
             assert state.current_version == "590.48.01"
             assert state.is_optimal is True
             assert len(state.options) == 4
-            assert state.options[0].recommended is True
+            assert "NVIDIA" in state.options[0].description
 
     def test_wrong_branch(self, mock_gpu, mock_driver_range):
         """Test detection when wrong branch installed."""

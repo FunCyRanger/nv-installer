@@ -324,10 +324,31 @@ def print_compatibility_info(
     print(f"Status: {status}")
 
 
-def _get_cuda_range_str(driver_range: DriverRange) -> str | None:
-    """Format CUDA range for display."""
+def _get_cuda_range_str(
+    driver_range: DriverRange, gpu_generation: str | None = None
+) -> str | None:
+    """Format CUDA range for display.
+
+    Args:
+        driver_range: Driver range with CUDA info.
+        gpu_generation: GPU generation name (e.g., "maxwell") for lock display.
+
+    Returns:
+        Formatted CUDA string or None.
+    """
     if not driver_range.cuda_min:
         return None
+
+    # Show lock info if CUDA is locked
+    if driver_range.cuda_is_locked:
+        if driver_range.cuda_locked_major:
+            gen_str = f" for {gpu_generation}" if gpu_generation else ""
+            return f"CUDA {driver_range.cuda_locked_major}.x (locked{gen_str})"
+        elif driver_range.cuda_max:
+            gen_str = f" for {gpu_generation}" if gpu_generation else ""
+            return f"CUDA {driver_range.cuda_max} (locked{gen_str})"
+
+    # Show range for unlocked
     if driver_range.cuda_max:
         return f"CUDA {driver_range.cuda_min}-{driver_range.cuda_max}"
     return f"CUDA {driver_range.cuda_min}+"
@@ -350,9 +371,10 @@ def detect_driver_state(
     """
     driver_type = get_current_driver_type()
     working = is_nvidia_working()
-    cuda_range = _get_cuda_range_str(driver_range)
+    cuda_range = _get_cuda_range_str(driver_range, gpu.generation)
     nonfree_available = check_nonfree_available()
     nvidia_open_available = check_nvidia_open_available()
+    is_eol = driver_range.is_eol
 
     if working.is_working:
         compatible = (
@@ -370,7 +392,7 @@ def detect_driver_state(
                 is_optimal=True,
                 suggested_packages=suggested,
                 options=_build_optimal_options(
-                    driver_type, cuda_range, nvidia_open_available
+                    driver_type, cuda_range, nvidia_open_available, is_eol
                 ),
                 message=f"NVIDIA driver {working.driver_version} is working optimally",
                 cuda_range=cuda_range,
@@ -383,7 +405,11 @@ def detect_driver_state(
                 is_optimal=False,
                 suggested_packages=suggested,
                 options=_build_wrong_branch_options(
-                    driver_range, cuda_range, nvidia_open_available, nonfree_available
+                    driver_range,
+                    cuda_range,
+                    nvidia_open_available,
+                    nonfree_available,
+                    is_eol,
                 ),
                 message=f"Driver {working.driver_version} may not be optimal for {gpu.model}",
                 cuda_range=cuda_range,
@@ -398,7 +424,7 @@ def detect_driver_state(
             is_optimal=False,
             suggested_packages=suggested,
             options=_build_nouveau_options(
-                cuda_range, nvidia_open_available, nonfree_available
+                cuda_range, nvidia_open_available, nonfree_available, is_eol
             ),
             message="Nouveau (open-source) driver is active",
             cuda_range=cuda_range,
@@ -412,7 +438,7 @@ def detect_driver_state(
             is_compatible=True,
             is_optimal=True,
             suggested_packages=suggested,
-            options=_build_nvidia_open_options(cuda_range, nonfree_available),
+            options=_build_nvidia_open_options(cuda_range, nonfree_available, is_eol),
             message="NVIDIA Open driver is active",
             cuda_range=cuda_range,
         )
@@ -426,7 +452,7 @@ def detect_driver_state(
             is_optimal=False,
             suggested_packages=suggested,
             options=_build_nothing_options(
-                cuda_range, nvidia_open_available, nonfree_available
+                cuda_range, nvidia_open_available, nonfree_available, is_eol
             ),
             message="No NVIDIA driver installed"
             + (" (non-free repos not enabled)" if not nonfree_available else ""),
@@ -438,22 +464,21 @@ def _build_optimal_options(
     driver_type: str,
     cuda_range: str | None,
     nvidia_open_available: bool,
+    is_eol: bool = False,
 ) -> list[DriverOption]:
     """Build options for optimal driver state."""
+    eol_suffix = " [EOL]" if is_eol else ""
+
     options = [
-        DriverOption(1, "Upgrade to latest", "upgrade", recommended=True),
+        DriverOption(1, "NVIDIA proprietary" + eol_suffix, "upgrade"),
         DriverOption(2, "Keep current driver", "keep"),
     ]
-
-    cuda_suffix = f" ({cuda_range})" if cuda_range else ""
 
     if nvidia_open_available and driver_type != "nvidia_open":
         options.append(
             DriverOption(
-                len(options) + 1,
-                f"Switch to NVIDIA Open{cuda_suffix}"
-                if cuda_suffix
-                else "Switch to NVIDIA Open (open-source kernel module)",
+                3,
+                "NVIDIA Open" + eol_suffix,
                 "switch_nvidia_open",
             )
         )
@@ -461,8 +486,7 @@ def _build_optimal_options(
     options.append(
         DriverOption(
             len(options) + 1,
-            "Switch to Nouveau (open-source)"
-            + (f" ({cuda_range})" if cuda_range else ""),
+            "Nouveau (open-source, no CUDA)",
             "switch_nouveau",
         )
     )
@@ -475,43 +499,34 @@ def _build_wrong_branch_options(
     cuda_range: str | None,
     nvidia_open_available: bool,
     nonfree_available: bool,
+    is_eol: bool = False,
 ) -> list[DriverOption]:
     """Build options for wrong branch driver state."""
-    cuda_suffix = f" ({cuda_range})" if cuda_range else ""
-
+    eol_suffix = " [EOL]" if is_eol else ""
     options = []
 
     if nonfree_available:
-        branch_desc = (
-            f"Install correct branch ({driver_range.max_branch}){cuda_suffix}"
-            if cuda_suffix
-            else f"Install correct branch ({driver_range.max_branch})"
-        )
-        options.append(DriverOption(1, branch_desc, "install", recommended=True))
+        options.append(DriverOption(1, "NVIDIA proprietary" + eol_suffix, "install"))
     else:
         options.append(
             DriverOption(
                 1,
-                f"Enable non-free repos + install correct branch ({driver_range.max_branch}){cuda_suffix}",
+                "Enable non-free + install NVIDIA proprietary" + eol_suffix,
                 "install",
-                recommended=True,
             )
         )
 
     options.append(DriverOption(2, "Keep current driver", "keep"))
 
     if nvidia_open_available:
-        open_desc = (
-            f"Switch to NVIDIA Open{cuda_suffix}"
-            if cuda_suffix
-            else "Switch to NVIDIA Open"
+        options.append(
+            DriverOption(3, "NVIDIA Open" + eol_suffix, "switch_nvidia_open")
         )
-        options.append(DriverOption(3, open_desc, "switch_nvidia_open"))
 
     options.append(
         DriverOption(
             len(options) + 1,
-            "Switch to Nouveau (open-source, no CUDA support)",
+            "Nouveau (open-source, no CUDA)",
             "switch_nouveau",
         )
     )
@@ -523,47 +538,39 @@ def _build_nouveau_options(
     cuda_range: str | None,
     nvidia_open_available: bool,
     nonfree_available: bool,
+    is_eol: bool = False,
 ) -> list[DriverOption]:
     """Build options for Nouveau active state."""
-    cuda_suffix = f" ({cuda_range})" if cuda_range else ""
+    eol_suffix = " [EOL]" if is_eol else ""
     options = []
 
     if nonfree_available:
         options.append(
             DriverOption(
                 1,
-                f"Switch to proprietary driver{cuda_suffix}"
-                if cuda_suffix
-                else "Switch to proprietary driver",
+                "NVIDIA proprietary" + eol_suffix,
                 "install",
-                recommended=True,
             )
         )
     else:
         options.append(
             DriverOption(
                 1,
-                f"Enable non-free repos + switch to proprietary{cuda_suffix}"
-                if cuda_suffix
-                else "Enable non-free repos + switch to proprietary",
+                "Enable non-free + install NVIDIA proprietary" + eol_suffix,
                 "install",
-                recommended=True,
             )
         )
 
     if nvidia_open_available:
-        open_suffix = cuda_suffix if cuda_range else ""
         options.append(
             DriverOption(
-                len(options) + 1,
-                f"Switch to NVIDIA Open{open_suffix}"
-                if cuda_range
-                else "Switch to NVIDIA Open",
+                2,
+                "NVIDIA Open" + eol_suffix,
                 "install_nvidia_open",
             )
         )
 
-    options.append(DriverOption(len(options) + 1, "Keep Nouveau (open-source)", "keep"))
+    options.append(DriverOption(len(options) + 1, "Keep Nouveau (no CUDA)", "keep"))
 
     return options
 
@@ -571,11 +578,12 @@ def _build_nouveau_options(
 def _build_nvidia_open_options(
     cuda_range: str | None,
     nonfree_available: bool,
+    is_eol: bool = False,
 ) -> list[DriverOption]:
     """Build options for NVIDIA Open active state."""
-    cuda_suffix = f" ({cuda_range})" if cuda_range else ""
+    eol_suffix = " [EOL]" if is_eol else ""
     options = [
-        DriverOption(1, "Upgrade to latest", "upgrade", recommended=True),
+        DriverOption(1, "Upgrade to latest" + eol_suffix, "upgrade"),
         DriverOption(2, "Keep NVIDIA Open", "keep"),
     ]
 
@@ -583,9 +591,7 @@ def _build_nvidia_open_options(
         options.append(
             DriverOption(
                 3,
-                f"Switch to proprietary{cuda_suffix}"
-                if cuda_suffix
-                else "Switch to proprietary driver",
+                "NVIDIA proprietary" + eol_suffix,
                 "install",
             )
         )
@@ -593,9 +599,7 @@ def _build_nvidia_open_options(
     options.append(
         DriverOption(
             len(options) + 1,
-            f"Switch to Nouveau (open-source){cuda_suffix}"
-            if cuda_suffix
-            else "Switch to Nouveau (open-source)",
+            "Nouveau (open-source, no CUDA)",
             "switch_nouveau",
         )
     )
@@ -607,53 +611,43 @@ def _build_nothing_options(
     cuda_range: str | None,
     nvidia_open_available: bool,
     nonfree_available: bool,
+    is_eol: bool = False,
 ) -> list[DriverOption]:
     """Build options for no driver installed state."""
-    cuda_suffix = f" ({cuda_range})" if cuda_range else ""
+    eol_suffix = " [EOL]" if is_eol else ""
     options = []
 
     if nonfree_available:
         options.append(
             DriverOption(
                 1,
-                f"Install proprietary driver{cuda_suffix}"
-                if cuda_suffix
-                else "Install proprietary driver",
+                "NVIDIA proprietary" + eol_suffix,
                 "install",
-                recommended=True,
             )
         )
     else:
         options.append(
             DriverOption(
                 1,
-                f"Enable non-free repos + install proprietary{cuda_suffix}"
-                if cuda_suffix
-                else "Enable non-free repos + install proprietary driver",
+                "Enable non-free + install NVIDIA proprietary" + eol_suffix,
                 "install",
-                recommended=True,
             )
         )
 
     if nvidia_open_available:
-        open_suffix = cuda_suffix if cuda_range else ""
         if nonfree_available:
             options.append(
                 DriverOption(
-                    len(options) + 1,
-                    f"Install NVIDIA Open{open_suffix}"
-                    if cuda_range
-                    else "Install NVIDIA Open",
+                    2,
+                    "NVIDIA Open" + eol_suffix,
                     "install_nvidia_open",
                 )
             )
         else:
             options.append(
                 DriverOption(
-                    len(options) + 1,
-                    f"Enable non-free repos + install NVIDIA Open{open_suffix}"
-                    if cuda_range
-                    else "Enable non-free repos + install NVIDIA Open",
+                    2,
+                    "Enable non-free + install NVIDIA Open" + eol_suffix,
                     "install_nvidia_open",
                 )
             )
@@ -661,7 +655,7 @@ def _build_nothing_options(
     options.append(
         DriverOption(
             len(options) + 1,
-            "Install Nouveau (open-source, no CUDA support)",
+            "Nouveau (open-source, no CUDA)",
             "install_nouveau",
         )
     )
@@ -703,8 +697,7 @@ def show_driver_options(state: DriverState, distro_id: str) -> int:
 
     print("\nOptions:")
     for opt in state.options:
-        rec = " [RECOMMENDED]" if opt.recommended else ""
-        print(f"  [{opt.number}] {opt.description}{rec}")
+        print(f"  [{opt.number}] {opt.description}")
 
     while True:
         try:
@@ -1138,6 +1131,45 @@ def _install_cuda_packages(distro: DistroInfo, cuda_version: str | None = None) 
         return False
 
 
+def _verify_cuda_installation() -> tuple[bool, str]:
+    """Verify CUDA installation by checking nvcc --version.
+
+    Returns:
+        Tuple of (success, version_string or error message)
+    """
+    import subprocess
+
+    from nvidia_inst.utils.system import find_nvcc
+
+    nvcc_path = find_nvcc()
+    if not nvcc_path:
+        return False, "nvcc not found in PATH or known locations"
+
+    try:
+        result = subprocess.run(
+            [nvcc_path, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            # Extract version from output
+            for line in result.stdout.splitlines():
+                if "release" in line:
+                    import re
+
+                    match = re.search(r"release (\d+\.\d+)", line)
+                    if match:
+                        return True, f"nvcc {match.group(1)}"
+            return True, "nvcc installed (version unknown)"
+        else:
+            return False, f"nvcc failed: {result.stderr[:100]}"
+    except subprocess.TimeoutExpired:
+        return False, "nvcc timeout"
+    except Exception as e:
+        return False, f"nvcc error: {e}"
+
+
 def _prompt_reboot() -> None:
     """Prompt user to reboot."""
     print("\nPlease reboot your system for changes to take effect.")
@@ -1508,6 +1540,7 @@ def execute_driver_change(
     dry_run: bool = False,
     with_cuda: bool = True,
     cuda_version: str | None = None,
+    skip_plan: bool = False,
 ) -> int:
     """Execute the selected driver change.
 
@@ -1516,14 +1549,16 @@ def execute_driver_change(
         state: Current driver state.
         distro: Distribution information.
         gpu: GPU information.
-        driver_range: Compatible driver range.
+        driver_range: Compatible driver version range.
         dry_run: If True, show what would happen without executing.
         with_cuda: Install CUDA toolkit.
         cuda_version: Specific CUDA version.
+        skip_plan: If True, skip showing the plan (already shown).
 
     Returns:
         0 on success, 1 on failure.
     """
+    packages: list[str] = []
     if option.action == "keep":
         print("\nNo changes made.")
         return 0
@@ -1534,24 +1569,18 @@ def execute_driver_change(
 
     if option.action == "revert_nouveau":
         if dry_run:
-            _dry_run_revert(distro)
+            _dry_run_change(
+                state, packages, distro, with_cuda=with_cuda, cuda_version=cuda_version
+            )
             return 0
 
         from nvidia_inst.utils.permissions import require_root
 
-        step = 1
-
         if not require_root(interactive=True):
-            print("\n[ERROR] Root privileges required to install drivers.")
+            print("\n[ERROR] Root privileges required to revert to Nouveau.")
             return 1
 
-        print("\n[WARNING] This will remove NVIDIA proprietary driver.")
-        response = input("Continue? [y/N]: ")
-        if response.lower() not in ("y", "yes"):
-            print("Cancelled.")
-            return 0
-
-        print("\nRemoving proprietary driver...")
+        print("\nReverting to Nouveau driver...")
         result = revert_to_nouveau(distro.id)
         if result.success:
             print(f"\n✓ {result.message}")
@@ -1568,7 +1597,11 @@ def execute_driver_change(
 
         if dry_run:
             _dry_run_change(
-                state, packages, distro, with_cuda=with_cuda, cuda_version=cuda_version
+                state,
+                packages,
+                distro,
+                with_cuda=with_cuda,
+                cuda_version=cuda_version,
             )
             return 0
 
@@ -1578,60 +1611,174 @@ def execute_driver_change(
             print("\n[ERROR] Root privileges required to install drivers.")
             return 1
 
+        # Detect if we can lock before install (Pacman cannot)
+        pkg_manager = get_package_manager()
+        can_lock_before = pkg_manager.__class__.__name__ != "PacmanManager"
+
+        step = 1
+
+        # Auto-select CUDA if locked and not specified
+        if with_cuda and cuda_version is None and driver_range.cuda_is_locked:
+            if driver_range.cuda_locked_major:
+                cuda_version = f"{driver_range.cuda_locked_major}.0"
+                print(
+                    f"\n[INFO] CUDA locked to {driver_range.cuda_locked_major}.x for {gpu.generation}"
+                )
+                print(f"[INFO] Auto-selecting CUDA {cuda_version}")
+            elif driver_range.cuda_max:
+                cuda_version = driver_range.cuda_max
+
+        # Collect packages to install
+        all_packages = list(packages)
+        if with_cuda:
+            cuda_installer = _get_cuda_installer(distro.id)
+            cuda_pkgs = cuda_installer.get_cuda_packages(cuda_version)
+            all_packages.extend(cuda_pkgs)
+
+        # Determine if we need locks
+        needs_driver_lock = driver_range.is_limited or driver_range.is_eol
+        needs_cuda_lock = driver_range.cuda_is_locked
+
+        # ===== STEP 1: Remove old packages =====
         driver_type = get_current_driver_type()
         if driver_type == "nouveau":
-            print(f"\n[Step {step}] Nouveau is active. Installing proprietary driver.")
-            print("Note: Nouveau blacklist will be created automatically.")
-            step += 1
+            print(f"\n[Step {step}] Nouveau is active - installing proprietary driver")
         else:
             print(f"\n[Step {step}] Removing old driver packages...")
             packages_to_remove = _get_packages_to_remove(distro.id)
             removed = _remove_packages(distro.id, packages_to_remove)
             if removed:
-                print(f"  Removed: {', '.join(removed)}")
+                print(f"           Removed: {', '.join(removed)}")
+        step += 1
+
+        # ===== STEP 2-3: Apply locks BEFORE install (if supported) =====
+        if can_lock_before and needs_driver_lock and driver_range.max_branch:
+            print(
+                f"\n[Step {step}] Locking driver to branch {driver_range.max_branch}.*"
+            )
+            lock_cmd = _get_driver_lock_command(distro.id, driver_range.max_branch)
+            logger.info(f"Executing: {lock_cmd}")
+            import subprocess
+
+            lock_result = subprocess.run(
+                lock_cmd, shell=True, capture_output=True, text=True
+            )
+            if lock_result.returncode == 0:
+                print("           Driver lock applied")
+            else:
+                logger.warning(f"Driver lock failed: {lock_result.stderr}")
+                print("           [WARNING] Driver lock failed")
             step += 1
 
-        print(f"\n[Step {step}] Installing: {' '.join(packages)}")
-        pkg_manager = get_package_manager()
+        if can_lock_before and needs_cuda_lock and driver_range.cuda_locked_major:
+            print(
+                f"\n[Step {step}] Locking CUDA to major version {driver_range.cuda_locked_major}-*"
+            )
+            cuda_lock_cmd = _get_cuda_lock_command(
+                distro.id, driver_range.cuda_locked_major
+            )
+            logger.info(f"Executing: {cuda_lock_cmd}")
+            import subprocess
+
+            lock_result = subprocess.run(
+                cuda_lock_cmd, shell=True, capture_output=True, text=True
+            )
+            if lock_result.returncode == 0:
+                print("           CUDA lock applied")
+            else:
+                logger.warning(f"CUDA lock failed: {lock_result.stderr}")
+                print("           [WARNING] CUDA lock failed")
+            step += 1
+
+        # ===== STEP 2/4: Install ALL packages (driver + CUDA together) =====
+        print(f"\n[Step {step}] Installing packages...")
+        print(
+            f"           {' '.join(all_packages[:5])}{'...' if len(all_packages) > 5 else ''}"
+        )
         try:
-            pkg_manager.install(packages)
+            pkg_manager.install(all_packages)
+            print("           Packages installed successfully")
         except Exception as e:
             logger.error(f"Installation failed: {e}")
-            print(f"Installation failed: {e}")
+            print(f"           Installation failed: {e}")
             return 1
         step += 1
 
+        # ===== STEP 3/5: Apply locks AFTER install (Pacman only) =====
+        if not can_lock_before and needs_driver_lock and driver_range.max_branch:
+            print(
+                f"\n[Step {step}] Locking driver to branch {driver_range.max_branch}.*"
+            )
+            lock_cmd = _get_driver_lock_command(distro.id, driver_range.max_branch)
+            logger.info(f"Executing: {lock_cmd}")
+            import subprocess
+
+            lock_result = subprocess.run(
+                lock_cmd, shell=True, capture_output=True, text=True
+            )
+            if lock_result.returncode == 0:
+                print("           Driver lock applied")
+            else:
+                logger.warning(f"Driver lock failed: {lock_result.stderr}")
+                print("           [WARNING] Driver lock failed")
+            step += 1
+
+        if not can_lock_before and needs_cuda_lock and driver_range.cuda_locked_major:
+            print(
+                f"\n[Step {step}] Locking CUDA to major version {driver_range.cuda_locked_major}-*"
+            )
+            cuda_lock_cmd = _get_cuda_lock_command(
+                distro.id, driver_range.cuda_locked_major
+            )
+            logger.info(f"Executing: {cuda_lock_cmd}")
+            import subprocess
+
+            lock_result = subprocess.run(
+                cuda_lock_cmd, shell=True, capture_output=True, text=True
+            )
+            if lock_result.returncode == 0:
+                print("           CUDA lock applied")
+            else:
+                logger.warning(f"CUDA lock failed: {lock_result.stderr}")
+                print("           [WARNING] CUDA lock failed")
+            step += 1
+
+        # ===== Common post-install steps =====
         print(f"\n[Step {step}] Rebuilding initramfs...")
         if not _rebuild_initramfs(distro.id):
-            print("[WARNING] Initramfs rebuild had issues. Reboot may fail.")
+            print("           [WARNING] Initramfs rebuild had issues")
+        else:
+            print("           Initramfs rebuilt successfully")
         step += 1
 
         if check_secure_boot():
-            print(f"\n[Step {step}] Secure Boot detected. Re-signing modules...")
+            print(f"\n[Step {step}] Secure Boot detected - re-signing modules...")
             key_paths = get_mok_key_paths(distro.id)
             signed, failed = sign_nvidia_modules(
                 key_paths.private_key,
                 key_paths.public_cert,
             )
             if signed > 0:
-                print(f"  Signed: {signed}, Failed: {failed}")
+                print(f"           Signed: {signed} modules")
+            else:
+                print("           [WARNING] Module signing failed")
+            step += 1
+
+        # Verify CUDA actually works after installation
+        if with_cuda:
+            print(f"\n[Step {step}] Verifying CUDA installation...")
+            nvcc_ok, nvcc_version = _verify_cuda_installation()
+            if nvcc_ok:
+                print(f"           CUDA verified: {nvcc_version}")
             else:
                 print(
-                    "[WARNING] Module signing failed. Driver may not load with Secure Boot."
+                    "           [WARNING] CUDA verification failed - nvcc not working"
                 )
             step += 1
 
-        # Install CUDA toolkit if requested
-        if with_cuda:
-            print(f"\n[Step {step}] Installing CUDA toolkit...")
-            cuda_success = _install_cuda_packages(distro, cuda_version)
-            if not cuda_success:
-                print(
-                    "[WARNING] CUDA toolkit installation failed, but driver is installed."
-                )
-            step += 1
-
-        print("\n✓ Driver installed successfully")
+        print("\n" + "=" * 50)
+        print("  Installation completed successfully!")
+        print("=" * 50)
         _prompt_reboot()
         return 0
 
@@ -1785,16 +1932,15 @@ def install_driver_cli(
         driver_version = driver_range.max_version
         logger.info(f"Using EOL driver version: {driver_version}")
 
-    print_compatibility_info(distro, gpu, driver_range)
-
-    if driver_range.is_eol:
-        print(f"\nWARNING: {driver_range.eol_message}")
-
     if dry_run:
         return _run_dry_run(
             distro, gpu, driver_range, driver_version, with_cuda, cuda_version
         )
 
+    # Step 1: Show system analysis first (analyze the situation - no root needed)
+    data = _print_system_analysis(distro, gpu, driver_range, with_cuda, cuda_version)
+
+    # Step 2: Show options after analysis
     state = detect_driver_state(gpu, driver_range, distro.id)
     selected = show_driver_options(state, distro.id)
 
@@ -1802,6 +1948,49 @@ def install_driver_cli(
         return 0
 
     option = next(opt for opt in state.options if opt.number == selected)
+
+    # Actions that don't require confirmation (no system changes)
+    no_confirm_actions = ("keep", "cancel")
+
+    if option.action in no_confirm_actions:
+        # Execute directly without plan or confirmation
+        return execute_driver_change(
+            option,
+            state,
+            distro,
+            gpu,
+            driver_range,
+            dry_run=False,
+            with_cuda=with_cuda,
+            cuda_version=cuda_version,
+        )
+
+    # Step 3: Show action plan for selected option (only for actions that make changes)
+    _print_action_plan(
+        option.action,
+        distro,
+        driver_range,
+        driver_version,
+        with_cuda,
+        data.get("cuda_version", cuda_version),
+        data,
+    )
+
+    # Step 4: Ask for confirmation (unless skip_confirmation)
+    if not skip_confirmation:
+        print("\n" + "=" * 64)
+        confirm = input("  Proceed with installation? [y/N] ").strip().lower()
+        if confirm not in ("y", "yes"):
+            print("  Installation cancelled.")
+            return 0
+        print("=" * 64)
+
+    # Step 5: Request root only when installation actually starts
+    from nvidia_inst.utils.permissions import require_root
+
+    if not require_root(interactive=True):
+        print("\n[ERROR] Root privileges required to modify drivers.")
+        return 0
 
     return execute_driver_change(
         option,
@@ -1812,7 +2001,296 @@ def install_driver_cli(
         dry_run=False,
         with_cuda=with_cuda,
         cuda_version=cuda_version,
+        skip_plan=True,  # Plan already shown above
     )
+
+
+def _print_system_analysis(
+    distro: DistroInfo,
+    gpu: GPUInfo,
+    driver_range: DriverRange,
+    with_cuda: bool,
+    cuda_version: str | None,
+) -> dict:
+    """Print system analysis sections and return computed data.
+
+    Returns dict with: installed_cuda, nouveau_loaded, sb_enabled, packages,
+    cuda_pkgs, cuda_warnings, cuda_version
+    """
+    from nvidia_inst.distro.factory import get_package_manager
+    from nvidia_inst.installer.cuda import detect_installed_cuda_version
+    from nvidia_inst.installer.driver import (
+        check_nouveau,
+        get_compatible_driver_packages,
+    )
+
+    # Detect system state
+    installed_cuda = detect_installed_cuda_version()
+    nouveau_loaded = check_nouveau()
+    sb_enabled = check_secure_boot()
+    pkg_manager = get_package_manager()
+    packages = get_compatible_driver_packages(distro.id, driver_range)
+
+    # Auto-select CUDA if locked and not specified
+    if with_cuda and cuda_version is None and driver_range.cuda_is_locked:
+        if driver_range.cuda_locked_major:
+            cuda_version = f"{driver_range.cuda_locked_major}.0"
+        elif driver_range.cuda_max:
+            cuda_version = driver_range.cuda_max
+
+    # Get CUDA packages
+    cuda_pkgs = []
+    if with_cuda and cuda_version:
+        cuda_installer = _get_cuda_installer(distro.id)
+        cuda_pkgs = cuda_installer.get_cuda_packages(cuda_version)
+
+    # Check for incompatible installed CUDA
+    cuda_warnings = []
+    if (
+        installed_cuda
+        and driver_range.cuda_is_locked
+        and driver_range.cuda_locked_major
+    ):
+        installed_major = installed_cuda.split(".")[0]
+        if installed_major != driver_range.cuda_locked_major:
+            cuda_warnings.append(
+                f"Existing CUDA {installed_cuda} is INCOMPATIBLE (locked to {driver_range.cuda_locked_major}.x)"
+            )
+
+    # Print output
+    print("\n╔════════════════════════════════════════════════════════════════╗")
+    print("║  NVIDIA Driver Installation - System Analysis                 ║")
+    print("╚════════════════════════════════════════════════════════════════╝")
+
+    # DETECTED SYSTEM
+    print("\n┌─── DETECTED SYSTEM ───────────────────────────────────────────┐")
+    _print_row("Distribution", str(distro), 20)
+    _print_row("Kernel", _get_kernel_version(), 20)
+    _print_row("GPU", gpu.model, 20)
+    if gpu.compute_capability:
+        _print_row("Compute Cap.", str(gpu.compute_capability), 20)
+    tool = _detect_tool_name()
+    _print_row(
+        "Package Manager", f"{pkg_manager.__class__.__name__} ({tool})", 20, last=True
+    )
+
+    # INSTALLED SOFTWARE
+    print("\n┌─── INSTALLED SOFTWARE ────────────────────────────────────────┐")
+    _print_row("Driver", _get_installed_driver_version() or "None", 20)
+    _print_row("CUDA", installed_cuda or "None", 20, last=True)
+
+    # COMPATIBILITY
+    print("\n┌─── COMPATIBILITY ─────────────────────────────────────────────┐")
+    if driver_range.max_branch:
+        if driver_range.is_eol:
+            driver_info = f"{driver_range.max_version} (EOL)"
+        else:
+            driver_info = f"{driver_range.min_version} - {driver_range.max_version} (branch {driver_range.max_branch})"
+    else:
+        driver_info = (
+            f"{driver_range.min_version} - {driver_range.max_version or 'latest'}"
+        )
+    _print_row("Driver Range", driver_info, 20)
+
+    cuda_info = f"{driver_range.cuda_min}"
+    if driver_range.cuda_max:
+        cuda_info += f" - {driver_range.cuda_max}"
+    if driver_range.cuda_is_locked:
+        if driver_range.cuda_locked_major:
+            cuda_info += f" (locked to {driver_range.cuda_locked_major}.x)"
+        else:
+            cuda_info += " (locked)"
+    _print_row("CUDA Range", cuda_info, 20)
+
+    if driver_range.is_eol:
+        status = "End-of-life (security updates only)"
+    elif driver_range.is_limited:
+        status = "Limited support"
+    else:
+        status = "Full support"
+    _print_row("GPU Status", status, 20, last=True)
+
+    # CHECKS
+    print("\n┌─── PRE-INSTALL CHECKS ───────────────────────────────────────┐")
+    _print_row(
+        "Nouveau", "[ ] Disabled - REQUIRED" if nouveau_loaded else "[x] Not loaded", 20
+    )
+    _print_row(
+        "Secure Boot",
+        "[ ] Enabled - needs attention" if sb_enabled else "[x] Disabled",
+        20,
+    )
+    _print_row(
+        "CUDA Repo",
+        _check_cuda_repo_status(distro.id, distro.version_id),
+        20,
+        last=True,
+    )
+
+    # WARNINGS
+    if cuda_warnings or nouveau_loaded or sb_enabled:
+        print("\n┌─── WARNINGS ──────────────────────────────────────────────────┐")
+        if nouveau_loaded:
+            print("│  ⚠  Nouveau kernel module must be disabled before install    │")
+        if sb_enabled:
+            print("│  ⚠  Secure Boot is enabled - may require MOK key enrollment  │")
+        for warning in cuda_warnings:
+            print(f"│  ⚠  {warning:<58}│")
+        print("└────────────────────────────────────────────────────────────────┘")
+
+    return {
+        "installed_cuda": installed_cuda,
+        "nouveau_loaded": nouveau_loaded,
+        "sb_enabled": sb_enabled,
+        "pkg_manager": pkg_manager,
+        "packages": packages,
+        "cuda_pkgs": cuda_pkgs,
+        "cuda_warnings": cuda_warnings,
+        "cuda_version": cuda_version,
+    }
+
+
+def _print_action_plan(
+    action: str,
+    distro: DistroInfo,
+    driver_range: DriverRange,
+    driver_version: str | None,
+    with_cuda: bool,
+    cuda_version: str | None,
+    data: dict,
+) -> None:
+    """Print the action plan section."""
+    nouveau_loaded = data["nouveau_loaded"]
+    installed_cuda = data["installed_cuda"]
+    cuda_warnings = data["cuda_warnings"]
+    packages = data["packages"]
+    cuda_pkgs = data["cuda_pkgs"]
+
+    # PLANNED CHANGES
+    print("\n┌─── PLANNED CHANGES ───────────────────────────────────────────┐")
+
+    if action == "revert_nouveau":
+        _print_row("Action", "Revert to Nouveau", 20)
+        _print_row("Remove", "NVIDIA driver + CUDA", 20, last=True)
+    elif action in ("install_nvidia_open", "switch_nvidia_open"):
+        _print_row("Action", "Install NVIDIA Open driver", 20)
+        _print_row("Driver", "NVIDIA Open (open-source)", 20)
+        if with_cuda:
+            _print_row("CUDA", f"Install {cuda_version or 'latest'}", 20)
+        else:
+            _print_row("CUDA", "Skip", 20)
+        _print_row("Remove", "Old proprietary driver", 20, last=True)
+    elif action in ("install_nouveau", "switch_nouveau"):
+        _print_row("Action", "Install Nouveau driver", 20)
+        _print_row("Remove", "NVIDIA proprietary driver", 20, last=True)
+    else:  # install/upgrade
+        if nouveau_loaded:
+            _print_row("Action", "Disable Nouveau + Install", 20)
+        elif driver_range.is_eol or _has_installed_driver():
+            _print_row("Action", "Update/Replace driver", 20)
+        else:
+            _print_row("Action", "Fresh install", 20)
+
+        if driver_version:
+            driver_action = f"Install {driver_version}"
+        elif driver_range.is_eol:
+            driver_action = f"Install {driver_range.max_version} (EOL)"
+        elif driver_range.max_branch:
+            driver_action = f"Install {driver_range.max_branch}.xx (branch)"
+        else:
+            driver_action = "Install latest"
+        _print_row("Driver", driver_action, 20)
+
+        if with_cuda:
+            if cuda_warnings:
+                cuda_action = f"Install {cuda_version} (replaces {installed_cuda})"
+            elif driver_range.cuda_is_locked:
+                cuda_action = f"Install {cuda_version} (locked)"
+            else:
+                cuda_action = f"Install {cuda_version or 'latest'}"
+        else:
+            cuda_action = "Skip"
+        _print_row("CUDA", cuda_action, 20)
+
+        locks = []
+        if driver_range.max_branch and driver_range.is_limited:
+            locks.append(f"driver to {driver_range.max_branch}.*")
+        if driver_range.cuda_is_locked and driver_range.cuda_locked_major:
+            locks.append(f"CUDA to {driver_range.cuda_locked_major}.*")
+        if locks:
+            _print_row("Locks", ", ".join(locks), 20)
+
+        remove = []
+        if _has_installed_driver():
+            remove.append("old driver")
+        if cuda_warnings:
+            remove.append(f"CUDA {installed_cuda}")
+        if remove:
+            _print_row("Remove", ", ".join(remove), 20, last=True)
+        else:
+            print("└────────────────────────────────────────────────────────────────┘")
+
+    # PACKAGES
+    if packages or cuda_pkgs:
+        print("\n┌─── PACKAGES ──────────────────────────────────────────────────┐")
+        if packages:
+            _print_row(
+                "Driver",
+                " ".join(packages[:3]) + (" ..." if len(packages) > 3 else ""),
+                20,
+            )
+        if cuda_pkgs:
+            _print_row("CUDA", " ".join(cuda_pkgs), 20, last=True)
+        else:
+            _print_row("CUDA", "(none)", 20, last=True)
+
+    # COMMANDS preview
+    print("\n┌─── COMMANDS ──────────────────────────────────────────────────┐")
+    if action == "revert_nouveau":
+        print("│  1. sudo dnf remove -y akmod-nvidia xorg-x11-drv-nvidia*      │")
+        print("│  2. sudo dnf install -y xorg-x11-drv-nouveau                  │")
+        print("│  3. sudo dracut -f --regenerate-all                            │")
+        print("│  4. sudo reboot                                               │")
+    elif action in ("install_nvidia_open", "switch_nvidia_open"):
+        print(f"│  1. {_get_update_command(distro.id):<55}│")
+        print(
+            f"│  2. {_get_install_command(distro.id, cuda_pkgs[:3] if cuda_pkgs else ['nvidia-open']):<55}│"
+        )
+        print(f"│  3. {_get_initramfs_command(distro.id):<55}│")
+        print("│  4. sudo reboot                                               │")
+    elif action in ("install_nouveau", "switch_nouveau"):
+        print(f"│  1. {_get_update_command(distro.id):<55}│")
+        print(f"│  2. {_get_install_command(distro.id, ['xorg-x11-drv-nouveau']):<55}│")
+        print("│  3. sudo reboot                                               │")
+    else:
+        step = 1
+        print(f"│  {step}. {_get_update_command(distro.id):<55}│")
+        step += 1
+        if nouveau_loaded:
+            print(f"│  {step}. {_get_nouveau_remove_command(distro.id):<55}│")
+            step += 1
+        # Lock driver BEFORE install (if limited/EOL)
+        if driver_range.is_limited and driver_range.max_branch:
+            print(
+                f"│  {step}. {_get_driver_lock_command(distro.id, driver_range.max_branch):<55}│"
+            )
+            step += 1
+        # Lock CUDA BEFORE install (if locked)
+        if driver_range.cuda_is_locked and driver_range.cuda_locked_major:
+            print(
+                f"│  {step}. {_get_cuda_lock_command(distro.id, driver_range.cuda_locked_major):<55}│"
+            )
+            step += 1
+        # Install driver + CUDA together
+        all_pkgs = packages + (cuda_pkgs if cuda_pkgs else [])
+        print(f"│  {step}. {_get_install_command(distro.id, all_pkgs):<55}│")
+        step += 1
+        print(f"│  {step}. {_get_initramfs_command(distro.id):<55}│")
+        step += 1
+        print(
+            f"│  {step}. sudo reboot                                                   │"
+        )
+    print("└────────────────────────────────────────────────────────────────┘")
 
 
 def _run_dry_run(
@@ -1825,11 +2303,11 @@ def _run_dry_run(
 ) -> int:
     """Run in dry-run mode with compact table format."""
     from nvidia_inst.distro.factory import get_package_manager
-    from nvidia_inst.installer.driver import (
-        get_compatible_driver_packages,
-        check_nouveau,
-    )
     from nvidia_inst.installer.cuda import detect_installed_cuda_version
+    from nvidia_inst.installer.driver import (
+        check_nouveau,
+        get_compatible_driver_packages,
+    )
 
     # Detect system state
     installed_cuda = detect_installed_cuda_version()
@@ -2031,30 +2509,25 @@ def _run_dry_run(
         print(f"│  {step}. {remove_cmd:<56} │")
         step += 1
 
-    # Step 2: Lock driver (if limited)
-    if driver_range.max_branch and driver_range.is_limited:
+    # Step 2: Lock driver BEFORE install (if limited/EOL)
+    if driver_range.is_limited and driver_range.max_branch:
         lock_cmd = _get_driver_lock_command(distro.id, driver_range.max_branch)
         print(f"│  {step}. {lock_cmd:<56} │")
         step += 1
 
-    # Step 3: Install driver
-    install_cmd = _get_install_command(distro.id, packages)
-    print(f"│  {step}. {install_cmd:<56} │")
-    step += 1
-
-    # Step 4: Install CUDA
-    if cuda_pkgs:
-        cuda_install_cmd = _get_install_command(distro.id, cuda_pkgs)
-        print(f"│  {step}. {cuda_install_cmd:<56} │")
-        step += 1
-
-    # Step 4b: Lock CUDA (if locked)
+    # Step 3: Lock CUDA BEFORE install (if locked)
     if driver_range.cuda_is_locked and driver_range.cuda_locked_major:
         cuda_lock_cmd = _get_cuda_lock_command(
             distro.id, driver_range.cuda_locked_major
         )
         print(f"│  {step}. {cuda_lock_cmd:<56} │")
         step += 1
+
+    # Step 4: Install driver + CUDA together
+    all_pkgs = packages + (cuda_pkgs if cuda_pkgs else [])
+    install_cmd = _get_install_command(distro.id, all_pkgs)
+    print(f"│  {step}. {install_cmd:<56} │")
+    step += 1
 
     # Step 5: Initramfs
     initramfs_cmd = _get_initramfs_command(distro.id)
@@ -2163,28 +2636,67 @@ def _get_nouveau_remove_command(distro_id: str) -> str:
     return commands.get(distro_id, "sudo apt remove -y xserver-xorg-video-nouveau")
 
 
+def _detect_dnf_version() -> str:
+    """Detect if system uses dnf4 or dnf5.
+
+    Returns:
+        'dnf4' or 'dnf5'
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["dnf", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if "dnf5" in result.stdout.lower() or "dnf5" in result.stderr.lower():
+            return "dnf5"
+        return "dnf4"
+    except Exception:
+        return "dnf4"  # Default to dnf4 for safety
+
+
 def _get_driver_lock_command(distro_id: str, branch: str) -> str:
     """Get command to lock driver to branch."""
-    commands = {
-        "ubuntu": f"echo 'Pin: version {branch}.*' | sudo tee -a /etc/apt/preferences.d/nvidia",
-        "debian": f"echo 'Pin: version {branch}.*' | sudo tee -a /etc/apt/preferences.d/nvidia",
-        "fedora": f"sudo dnf versionlock add --raw 'akmod-nvidia-{branch}.*'",
-        "arch": f"sudo pacman -D --lock nvidia-{branch}xx",
-        "opensuse": f"sudo zypper addlock x11-video-nvidiaG05",
-    }
-    return commands.get(distro_id, f"# Lock to branch {branch}")
+    if distro_id in ("ubuntu", "debian"):
+        return f"echo 'Pin: version {branch}.*' | sudo tee -a /etc/apt/preferences.d/nvidia"
+    elif distro_id == "fedora":
+        # Detect dnf4 vs dnf5 - only dnf4 uses --raw flag
+        dnf_version = _detect_dnf_version()
+        if dnf_version == "dnf5":
+            return f"sudo dnf versionlock add 'akmod-nvidia-{branch}.*'"
+        return f"sudo dnf versionlock add --raw 'akmod-nvidia-{branch}.*'"
+    elif distro_id == "arch":
+        return f"sudo pacman -D --lock nvidia-{branch}xx"
+    elif distro_id == "opensuse":
+        return "sudo zypper addlock x11-video-nvidiaG05"
+    return f"# Lock to branch {branch}"
 
 
 def _get_cuda_lock_command(distro_id: str, major: str) -> str:
-    """Get command to lock CUDA to major version."""
-    commands = {
-        "ubuntu": f"echo 'Pin: version {major}.*' | sudo tee -a /etc/apt/preferences.d/cuda",
-        "debian": f"echo 'Pin: version {major}.*' | sudo tee -a /etc/apt/preferences.d/cuda",
-        "fedora": f"sudo dnf versionlock add --raw 'cuda-toolkit-{major}.*'",
-        "arch": f"sudo pacman -D --lock cuda-{major}*",
-        "opensuse": f"sudo zypper addlock 'cuda-toolkit-{major}.*'",
-    }
-    return commands.get(distro_id, f"# Lock CUDA to {major}.*")
+    """Get command to lock CUDA to major version.
+
+    Uses hyphen pattern for Fedora (cuda-toolkit-{major}-*) because
+    packages are named cuda-toolkit-13-2, not cuda-toolkit-13.2
+    """
+    if distro_id in ("ubuntu", "debian"):
+        return (
+            f"echo 'Pin: version {major}.*' | sudo tee -a /etc/apt/preferences.d/cuda"
+        )
+    elif distro_id == "fedora":
+        # Use hyphen pattern: cuda-toolkit-{major}-*
+        # Packages are named cuda-toolkit-13-2 (hyphen) not cuda-toolkit-13.2 (dot)
+        dnf_version = _detect_dnf_version()
+        if dnf_version == "dnf5":
+            return f"sudo dnf versionlock add 'cuda-toolkit-{major}-*'"
+        return f"sudo dnf versionlock add --raw 'cuda-toolkit-{major}-*'"
+    elif distro_id == "arch":
+        return f"sudo pacman -D --lock cuda-{major}*"
+    elif distro_id == "opensuse":
+        return f"sudo zypper addlock 'cuda-toolkit-{major}-*'"
+    return f"# Lock CUDA to {major}.*"
 
 
 def _get_install_command(distro_id: str, packages: list[str]) -> str:
@@ -2295,6 +2807,13 @@ def revert_to_nouveau_cli() -> int:
         print("Cancelled.")
         return 1
 
+    # Request root only after user confirms
+    from nvidia_inst.utils.permissions import require_root
+
+    if not require_root(interactive=True):
+        print("\n[ERROR] Root privileges required to modify drivers.")
+        return 0
+
     print("\nReverting to Nouveau...")
 
     result = revert_to_nouveau(distro.id)
@@ -2391,7 +2910,6 @@ def set_power_profile_cli(profile: str) -> int:
 
 def main() -> int:
     """Main entry point."""
-    from nvidia_inst.utils.permissions import require_root
 
     args = parse_args()
 
@@ -2409,9 +2927,7 @@ def main() -> int:
         return set_power_profile_cli(args.power_profile)
 
     if args.revert_to_nouveau:
-        if not args.dry_run and not require_root(interactive=True):
-            print("\n[ERROR] Root privileges required to modify drivers.")
-            return 1
+        # Root will be requested inside revert_to_nouveau_cli after confirmation
         return revert_to_nouveau_cli()
 
     if args.gui or args.gui_type:
@@ -2422,10 +2938,7 @@ def main() -> int:
     if args.check:
         return check_compatibility()
 
-    if not args.dry_run and not require_root(interactive=True):
-        print("\n[ERROR] Root privileges required to modify drivers.")
-        return 1
-
+    # Note: Root request moved to install_driver_cli after user confirms plan
     return install_driver_cli(
         driver_version=args.driver_version,
         with_cuda=not args.no_cuda,

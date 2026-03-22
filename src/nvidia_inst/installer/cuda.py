@@ -45,39 +45,46 @@ class UbuntuCUDAInstaller(CUDAInstaller):
     """CUDA installer for Ubuntu/Debian."""
 
     def get_cuda_packages(self, version: str | None = None) -> list[str]:
-        """Get CUDA packages for Ubuntu."""
-        if version:
-            return [
-                f"cuda-{version}",
-                f"cuda-toolkit-{version}",
-            ]
+        """Get CUDA packages for Ubuntu/Debian.
 
-        return [
-            "cuda",
-            "cuda-toolkit",
-        ]
+        Uses meta-packages by default - apt resolves to latest compatible.
+        """
+        # Use meta-packages, apt resolves to latest compatible
+        return ["cuda-toolkit"]
 
     def is_cuda_installed(self) -> bool:
         """Check if CUDA is installed."""
         import subprocess
 
+        from nvidia_inst.utils.system import find_nvcc
+
+        nvcc_path = find_nvcc()
+        if not nvcc_path:
+            return False
+
         try:
             result = subprocess.run(
-                ["nvcc", "--version"],
+                [nvcc_path, "--version"],
                 capture_output=True,
                 text=True,
             )
             return result.returncode == 0
-        except FileNotFoundError:
+        except Exception:
             return False
 
     def get_installed_cuda_version(self) -> str | None:
         """Get installed CUDA version."""
         import subprocess
 
+        from nvidia_inst.utils.system import find_nvcc
+
+        nvcc_path = find_nvcc()
+        if not nvcc_path:
+            return None
+
         try:
             result = subprocess.run(
-                ["nvcc", "--version"],
+                [nvcc_path, "--version"],
                 capture_output=True,
                 text=True,
             )
@@ -89,7 +96,7 @@ class UbuntuCUDAInstaller(CUDAInstaller):
                     if match:
                         return match.group(1)
             return None
-        except FileNotFoundError:
+        except Exception:
             return None
 
 
@@ -97,36 +104,47 @@ class FedoraCUDAInstaller(CUDAInstaller):
     """CUDA installer for Fedora/RHEL."""
 
     def get_cuda_packages(self, version: str | None = None) -> list[str]:
-        """Get CUDA packages for Fedora."""
-        if version:
-            return [
-                f"cuda-runtime-{version}",
-                f"cuda-devel-{version}",
-            ]
+        """Get CUDA packages for Fedora.
 
+        Uses meta-package approach - dnf resolves to latest compatible version.
+        Version parameter is ignored as we let dnf choose the best available.
+        """
+        # Use meta-package, dnf resolves to latest compatible
         return ["cuda-toolkit"]
 
     def is_cuda_installed(self) -> bool:
         """Check if CUDA is installed."""
         import subprocess
 
+        from nvidia_inst.utils.system import find_nvcc
+
+        nvcc_path = find_nvcc()
+        if not nvcc_path:
+            return False
+
         try:
             result = subprocess.run(
-                ["nvcc", "--version"],
+                [nvcc_path, "--version"],
                 capture_output=True,
                 text=True,
             )
             return result.returncode == 0
-        except FileNotFoundError:
+        except Exception:
             return False
 
     def get_installed_cuda_version(self) -> str | None:
         """Get installed CUDA version."""
         import subprocess
 
+        from nvidia_inst.utils.system import find_nvcc
+
+        nvcc_path = find_nvcc()
+        if not nvcc_path:
+            return None
+
         try:
             result = subprocess.run(
-                ["nvcc", "--version"],
+                [nvcc_path, "--version"],
                 capture_output=True,
                 text=True,
             )
@@ -138,7 +156,7 @@ class FedoraCUDAInstaller(CUDAInstaller):
                     if match:
                         return match.group(1)
             return None
-        except FileNotFoundError:
+        except Exception:
             return None
 
 
@@ -146,33 +164,45 @@ class ArchCUDAInstaller(CUDAInstaller):
     """CUDA installer for Arch Linux."""
 
     def get_cuda_packages(self, version: str | None = None) -> list[str]:
-        """Get CUDA packages for Arch."""
-        if version:
-            return [f"cuda-{version}"]
+        """Get CUDA packages for Arch.
 
+        Uses meta-package - pacman resolves to latest available.
+        """
         return ["cuda"]
 
     def is_cuda_installed(self) -> bool:
         """Check if CUDA is installed."""
         import subprocess
 
+        from nvidia_inst.utils.system import find_nvcc
+
+        nvcc_path = find_nvcc()
+        if not nvcc_path:
+            return False
+
         try:
             result = subprocess.run(
-                ["nvcc", "--version"],
+                [nvcc_path, "--version"],
                 capture_output=True,
                 text=True,
             )
             return result.returncode == 0
-        except FileNotFoundError:
+        except Exception:
             return False
 
     def get_installed_cuda_version(self) -> str | None:
         """Get installed CUDA version."""
         import subprocess
 
+        from nvidia_inst.utils.system import find_nvcc
+
+        nvcc_path = find_nvcc()
+        if not nvcc_path:
+            return None
+
         try:
             result = subprocess.run(
-                ["nvcc", "--version"],
+                [nvcc_path, "--version"],
                 capture_output=True,
                 text=True,
             )
@@ -184,7 +214,7 @@ class ArchCUDAInstaller(CUDAInstaller):
                     if match:
                         return match.group(1)
             return None
-        except FileNotFoundError:
+        except Exception:
             return None
 
 
@@ -220,9 +250,15 @@ def detect_installed_cuda_version() -> str | None:
     """
     import subprocess
 
+    from nvidia_inst.utils.system import find_nvcc
+
+    nvcc_path = find_nvcc()
+    if not nvcc_path:
+        return None
+
     try:
         result = subprocess.run(
-            ["nvcc", "--version"],
+            [nvcc_path, "--version"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -238,7 +274,7 @@ def detect_installed_cuda_version() -> str | None:
                 if match:
                     return match.group(1)
         return None
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except subprocess.TimeoutExpired:
         return None
 
 

@@ -179,7 +179,7 @@ class TestDnfManager:
         call_args = mock_subprocess_run.call_args[0][0]
         assert "versionlock" in call_args
         assert "add" in call_args
-        assert "--raw" in call_args
+        # --raw is only used for dnf4, not dnf5
         assert "akmod-nvidia-580.*" in call_args
 
     def test_pin_version_with_exact_version(self, dnf_manager, mock_subprocess_run):
@@ -188,7 +188,6 @@ class TestDnfManager:
         result = dnf_manager.pin_version("akmod-nvidia", "535.154.05")
         assert result is True
         call_args = mock_subprocess_run.call_args[0][0]
-        assert "--raw" in call_args
         assert "akmod-nvidia-535.154.05" in call_args
 
     def test_pin_version_default_star(self, dnf_manager, mock_subprocess_run):
@@ -197,7 +196,6 @@ class TestDnfManager:
         result = dnf_manager.pin_version("akmod-nvidia")
         assert result is True
         call_args = mock_subprocess_run.call_args[0][0]
-        assert "--raw" in call_args
         assert "akmod-nvidia-*" in call_args
 
     def test_pin_version_failure(self, dnf_manager, mock_subprocess_run):

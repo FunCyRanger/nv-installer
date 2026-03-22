@@ -85,55 +85,69 @@ DRIVER_OPEN_PACKAGES: dict[str, PackageMap] = {
 # =============================================================================
 
 # CUDA toolkit packages by tool and distro family
+# Uses meta-packages by default - package manager resolves to latest compatible
 CUDA_PACKAGES: dict[str, PackageMap] = {
     "apt": {
-        "ubuntu": ["cuda-toolkit-{version}", "cuda-{version}"],
-        "debian": ["cuda-toolkit-{version}", "cuda-{version}"],
-        "_default": ["cuda-toolkit-{version}", "cuda-{version}"],
+        "_default": ["cuda-toolkit"],
     },
     "apt-get": {
-        "_default": ["cuda-toolkit-{version}", "cuda-{version}"],
+        "_default": ["cuda-toolkit"],
     },
     "dnf": {
-        "fedora": ["cuda-toolkit-{version}"],
-        "_default": ["cuda-toolkit-{version}"],
+        "_default": ["cuda-toolkit"],
     },
     "dnf5": {
-        "_default": ["cuda-toolkit-{version}"],
+        "_default": ["cuda-toolkit"],
     },
     "yum": {
-        "_default": ["cuda-toolkit-{version}"],
+        "_default": ["cuda-toolkit"],
     },
     "pacman": {
-        "arch": ["cuda-{version}"],
-        "_default": ["cuda-{version}"],
+        "_default": ["cuda"],
     },
     "pamac": {
-        "_default": ["cuda-{version}"],
+        "_default": ["cuda"],
     },
     "paru": {
-        "_default": ["cuda-{version}"],
+        "_default": ["cuda"],
     },
     "yay": {
-        "_default": ["cuda-{version}"],
+        "_default": ["cuda"],
     },
     "zypper": {
-        "opensuse": ["cuda-{version}"],
-        "_default": ["cuda-{version}"],
+        "_default": ["cuda"],
     },
 }
 
-# CUDA major version lock packages (for pinning)
+# CUDA major version lock packages (for versionlock/pinning)
+# Fedora packages use hyphen format: cuda-toolkit-{major}-{minor}
+# e.g., cuda-toolkit-13-2 (not cuda-toolkit-13.2)
 CUDA_MAJOR_PACKAGES: dict[str, PackageMap] = {
     "apt": {
-        "ubuntu": ["cuda-{major}*", "cuda-toolkit-{major}*"],
-        "_default": ["cuda-{major}*", "cuda-toolkit-{major}*"],
+        "_default": ["cuda-toolkit-{major}*"],
+    },
+    "apt-get": {
+        "_default": ["cuda-toolkit-{major}*"],
     },
     "dnf": {
-        "fedora": ["cuda-toolkit-{major}*", "cuda-runtime-{major}*"],
-        "_default": ["cuda-toolkit-{major}*", "cuda-runtime-{major}*"],
+        "_default": ["cuda-toolkit-{major}-*"],  # Hyphen pattern for Fedora
+    },
+    "dnf5": {
+        "_default": ["cuda-toolkit-{major}-*"],  # Hyphen pattern for Fedora
+    },
+    "yum": {
+        "_default": ["cuda-toolkit-{major}-*"],  # Hyphen pattern for Fedora
     },
     "pacman": {
+        "_default": ["cuda-{major}*"],
+    },
+    "pamac": {
+        "_default": ["cuda-{major}*"],
+    },
+    "paru": {
+        "_default": ["cuda-{major}*"],
+    },
+    "yay": {
         "_default": ["cuda-{major}*"],
     },
     "zypper": {

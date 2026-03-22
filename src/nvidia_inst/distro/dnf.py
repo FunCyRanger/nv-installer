@@ -13,6 +13,29 @@ class DnfManager(PackageManager):
 
     def __init__(self) -> None:
         self._dnf_path = "/usr/bin/dnf"
+        self._dnf_version = self._detect_dnf_version()
+
+    def _detect_dnf_version(self) -> str:
+        """Detect if running dnf4 or dnf5.
+
+        Returns:
+            'dnf4' or 'dnf5'
+        """
+        try:
+            result = subprocess.run(
+                [self._dnf_path, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if "dnf5" in result.stdout.lower() or "dnf5" in result.stderr.lower():
+                logger.info("Detected DNF5")
+                return "dnf5"
+            logger.info("Detected DNF4")
+            return "dnf4"
+        except Exception as e:
+            logger.warning(f"Could not detect DNF version, defaulting to dnf4: {e}")
+            return "dnf4"
 
     def update(self) -> bool:
         """Update package lists using dnf."""
@@ -177,13 +200,13 @@ class DnfManager(PackageManager):
             True if successful, False otherwise.
         """
         try:
-            cmd = [
-                self._dnf_path,
-                "versionlock",
-                "add",
-                "--raw",
-                f"{package}-{version}",
-            ]
+            cmd = [self._dnf_path, "versionlock", "add"]
+
+            # DNF4 uses --raw flag, DNF5 doesn't support it
+            if self._dnf_version == "dnf4":
+                cmd.append("--raw")
+
+            cmd.append(f"{package}-{version}")
             subprocess.run(cmd, check=True, capture_output=True)
             logger.info(f"Locked {package} to pattern {version}")
             return True
