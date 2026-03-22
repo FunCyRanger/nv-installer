@@ -92,10 +92,51 @@ class PrerequisitesChecker:
 
         return result
 
+    @staticmethod
+    def get_cuda_repo_version(
+        distro_version: str, cuda_major: str | None = None
+    ) -> str:
+        """Get the appropriate CUDA repo version for a given CUDA major version.
+
+        NVIDIA repos only keep the latest CUDA version for each distro. To get older
+        CUDA versions, we need to use an older distro repo that had that CUDA version.
+
+        Args:
+            distro_version: Distribution version (e.g., "43")
+            cuda_major: Desired CUDA major version (e.g., "12"). If None, uses current distro.
+
+        Returns:
+            Repo version string to use (e.g., "43" or "41")
+        """
+        if cuda_major is None:
+            return distro_version
+
+        cuda_major_int = int(cuda_major) if cuda_major else 0
+
+        cuda_to_distro = {
+            12: "41",
+            13: "42",
+        }
+
+        if cuda_major_int in cuda_to_distro:
+            target_distro = cuda_to_distro[cuda_major_int]
+            if int(distro_version) >= int(target_distro):
+                return target_distro
+
+        return distro_version
+
     def get_cuda_repo_fix_commands(
-        self, distro_id: str, distro_version: str
+        self,
+        distro_id: str,
+        distro_version: str,
+        cuda_major: str | None = None,
     ) -> list[str]:
         """Get fix commands to add missing CUDA repository.
+
+        Args:
+            distro_id: Distribution ID
+            distro_version: Distribution version
+            cuda_major: Desired CUDA major version for version-locked installs
 
         Returns:
             List of commands to run to add CUDA repository.
@@ -104,15 +145,31 @@ class PrerequisitesChecker:
         if distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
             if not distro_version:
                 distro_version = "43"
-            # Check if CUDA repo exists
+
+            repo_version = self.get_cuda_repo_version(distro_version, cuda_major)
+            current_repo_version = self._get_cuda_repo_version_from_file()
+
             cuda_repo = self._repo_exists("cuda-fedora")
-            if not cuda_repo:
-                cuda_repo = self._repo_exists(f"cuda-fedora{distro_version}")
-            if not cuda_repo:
-                # Support both dnf5 (Fedora 41+) and dnf4 syntax
+            cuda_repo_name: str | None = None
+            if isinstance(cuda_repo, str):
+                cuda_repo_name = cuda_repo
+
+            needs_update = (
+                cuda_major is not None
+                and current_repo_version is not None
+                and current_repo_version != repo_version
+            )
+
+            if not cuda_repo_name or needs_update:
+                if needs_update:
+                    logger.info(
+                        f"Updating CUDA repo from fedora{current_repo_version} to "
+                        f"fedora{repo_version} for CUDA {cuda_major}.x"
+                    )
+                    fix_commands.append("sudo rm -f /etc/yum.repos.d/cuda-fedora*.repo")
                 fix_commands.append(
-                    f"sudo dnf config-manager addrepo --from-repofile=https://developer.download.nvidia.com/compute/cuda/repos/fedora{distro_version}/x86_64/cuda-fedora{distro_version}.repo --overwrite 2>/dev/null || "
-                    f"sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/fedora{distro_version}/x86_64/cuda-fedora{distro_version}.repo"
+                    f"sudo dnf config-manager addrepo --from-repofile=https://developer.download.nvidia.com/compute/cuda/repos/fedora{repo_version}/x86_64/cuda-fedora{repo_version}.repo --overwrite 2>/dev/null || "
+                    f"sudo dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/fedora{repo_version}/x86_64/cuda-fedora{repo_version}.repo"
                 )
         elif distro_id in ("ubuntu", "debian", "linuxmint", "pop"):
             cuda_keyring_installed = self._package_installed("cuda-keyring", distro_id)
@@ -287,8 +344,12 @@ class PrerequisitesChecker:
 
         return repos_status
 
-    def _repo_exists(self, repo_pattern: str) -> bool:
-        """Check if a repository is configured."""
+    def _repo_exists(self, repo_pattern: str) -> str | bool:
+        """Check if a repository is configured.
+
+        Returns:
+            Repo name if found, False otherwise.
+        """
         try:
             result = subprocess.run(
                 ["dnf", "repolist", "-q"],
@@ -296,13 +357,67 @@ class PrerequisitesChecker:
                 text=True,
                 timeout=10,
             )
-            return repo_pattern in result.stdout.lower()
+            lines = result.stdout.lower().splitlines()
+            for line in lines:
+                if repo_pattern in line:
+                    return line.split()[0]
+            return False
         except (
             subprocess.CalledProcessError,
             subprocess.TimeoutExpired,
             FileNotFoundError,
         ):
             return False
+
+    def _get_cuda_repo_version(self, repo_name: str) -> str | None:
+        """Get the fedora version from a CUDA repo URL.
+
+        Args:
+            repo_name: Name of the repo (e.g., 'cuda-fedora43-x86_64')
+
+        Returns:
+            Fedora version string (e.g., '43') or None if not parseable.
+        """
+        import re
+
+        try:
+            result = subprocess.run(
+                ["dnf", "reponame", repo_name, "-v"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            for line in result.stdout.splitlines():
+                if "baseurl" in line.lower():
+                    match = re.search(r"fedora(\d+)", line)
+                    if match:
+                        return match.group(1)
+        except Exception:
+            pass
+        return None
+
+    def _get_cuda_repo_version_from_file(self) -> str | None:
+        """Get the fedora version from existing CUDA repo file.
+
+        Parses /etc/yum.repos.d/cuda-*.repo files directly to get the
+        fedora version from the baseurl.
+
+        Returns:
+            Fedora version string (e.g., '43') or None if not found.
+        """
+        import glob
+        import re
+
+        for repo_file in glob.glob("/etc/yum.repos.d/cuda-fedora*.repo"):
+            try:
+                with open(repo_file) as f:
+                    content = f.read().lower()
+                    match = re.search(r"baseurl.*fedora(\d+)", content)
+                    if match:
+                        return match.group(1)
+            except Exception:
+                pass
+        return None
 
     def _package_installed(self, package_name: str, distro_id: str) -> bool:
         """Check if a package is installed."""

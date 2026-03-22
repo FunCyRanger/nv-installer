@@ -54,50 +54,11 @@ class UbuntuCUDAInstaller(CUDAInstaller):
 
     def is_cuda_installed(self) -> bool:
         """Check if CUDA is installed."""
-        import subprocess
-
-        from nvidia_inst.utils.system import find_nvcc
-
-        nvcc_path = find_nvcc()
-        if not nvcc_path:
-            return False
-
-        try:
-            result = subprocess.run(
-                [nvcc_path, "--version"],
-                capture_output=True,
-                text=True,
-            )
-            return result.returncode == 0
-        except Exception:
-            return False
+        return _detect_via_dpkg() is not None
 
     def get_installed_cuda_version(self) -> str | None:
         """Get installed CUDA version."""
-        import subprocess
-
-        from nvidia_inst.utils.system import find_nvcc
-
-        nvcc_path = find_nvcc()
-        if not nvcc_path:
-            return None
-
-        try:
-            result = subprocess.run(
-                [nvcc_path, "--version"],
-                capture_output=True,
-                text=True,
-            )
-            for line in result.stdout.splitlines():
-                if "release" in line:
-                    import re
-
-                    match = re.search(r"release (\d+\.\d+)", line)
-                    if match:
-                        return match.group(1)
-            return None
-        except Exception:
-            return None
+        return _detect_via_dpkg()
 
 
 class FedoraCUDAInstaller(CUDAInstaller):
@@ -106,58 +67,21 @@ class FedoraCUDAInstaller(CUDAInstaller):
     def get_cuda_packages(self, version: str | None = None) -> list[str]:
         """Get CUDA packages for Fedora.
 
-        Uses meta-package approach - dnf resolves to latest compatible version.
-        Version parameter is ignored as we let dnf choose the best available.
+        When version is specified (e.g., "12.0"), installs versioned packages.
+        When version is None, uses meta-package approach.
         """
-        # Use meta-package, dnf resolves to latest compatible
+        if version:
+            major = version.split(".")[0]
+            return [f"cuda-toolkit-{major}-*"]
         return ["cuda-toolkit"]
 
     def is_cuda_installed(self) -> bool:
         """Check if CUDA is installed."""
-        import subprocess
-
-        from nvidia_inst.utils.system import find_nvcc
-
-        nvcc_path = find_nvcc()
-        if not nvcc_path:
-            return False
-
-        try:
-            result = subprocess.run(
-                [nvcc_path, "--version"],
-                capture_output=True,
-                text=True,
-            )
-            return result.returncode == 0
-        except Exception:
-            return False
+        return _detect_via_rpm() is not None
 
     def get_installed_cuda_version(self) -> str | None:
         """Get installed CUDA version."""
-        import subprocess
-
-        from nvidia_inst.utils.system import find_nvcc
-
-        nvcc_path = find_nvcc()
-        if not nvcc_path:
-            return None
-
-        try:
-            result = subprocess.run(
-                [nvcc_path, "--version"],
-                capture_output=True,
-                text=True,
-            )
-            for line in result.stdout.splitlines():
-                if "release" in line:
-                    import re
-
-                    match = re.search(r"release (\d+\.\d+)", line)
-                    if match:
-                        return match.group(1)
-            return None
-        except Exception:
-            return None
+        return _detect_via_rpm()
 
 
 class ArchCUDAInstaller(CUDAInstaller):
@@ -172,50 +96,11 @@ class ArchCUDAInstaller(CUDAInstaller):
 
     def is_cuda_installed(self) -> bool:
         """Check if CUDA is installed."""
-        import subprocess
-
-        from nvidia_inst.utils.system import find_nvcc
-
-        nvcc_path = find_nvcc()
-        if not nvcc_path:
-            return False
-
-        try:
-            result = subprocess.run(
-                [nvcc_path, "--version"],
-                capture_output=True,
-                text=True,
-            )
-            return result.returncode == 0
-        except Exception:
-            return False
+        return _detect_via_pacman() is not None
 
     def get_installed_cuda_version(self) -> str | None:
         """Get installed CUDA version."""
-        import subprocess
-
-        from nvidia_inst.utils.system import find_nvcc
-
-        nvcc_path = find_nvcc()
-        if not nvcc_path:
-            return None
-
-        try:
-            result = subprocess.run(
-                [nvcc_path, "--version"],
-                capture_output=True,
-                text=True,
-            )
-            for line in result.stdout.splitlines():
-                if "release" in line:
-                    import re
-
-                    match = re.search(r"release (\d+\.\d+)", line)
-                    if match:
-                        return match.group(1)
-            return None
-        except Exception:
-            return None
+        return _detect_via_pacman()
 
 
 def get_cuda_installer(distro_id: str) -> CUDAInstaller:
@@ -242,23 +127,44 @@ def get_cuda_installer(distro_id: str) -> CUDAInstaller:
 # ============================================================================
 
 
-def detect_installed_cuda_version() -> str | None:
-    """Detect installed CUDA version via nvcc.
+def _parse_cuda_version_from_package(pkg_name: str) -> str | None:
+    """Parse CUDA version from package name.
+
+    Args:
+        pkg_name: Package name (e.g., cuda-toolkit-12-6-12.6.3-1.x86_64)
 
     Returns:
-        CUDA version string (e.g., "12.2") or None if not installed.
+        CUDA version string (e.g., "12.6") or None if not parseable.
     """
+    import re
+
+    match = re.search(r"cuda-toolkit-(\d+)-(\d+)-", pkg_name)
+    if match:
+        return f"{match.group(1)}.{match.group(2)}"
+    match = re.search(r"cuda-toolkit-(\d+)-(\d+)$", pkg_name)
+    if match:
+        return f"{match.group(1)}.{match.group(2)}"
+    match = re.search(r"cuda-(\d+)\.(\d+)-", pkg_name)
+    if match:
+        return f"{match.group(1)}.{match.group(2)}"
+    match = re.search(r"cuda-(\d+)\.(\d+)$", pkg_name)
+    if match:
+        return f"{match.group(1)}.{match.group(2)}"
+    return None
+
+
+def _detect_via_rpm() -> str | None:
+    """Query RPM for installed CUDA packages.
+
+    Returns:
+        CUDA version string (e.g., "12.6") or None if not found.
+    """
+    import re
     import subprocess
-
-    from nvidia_inst.utils.system import find_nvcc
-
-    nvcc_path = find_nvcc()
-    if not nvcc_path:
-        return None
 
     try:
         result = subprocess.run(
-            [nvcc_path, "--version"],
+            ["rpm", "-qa", "--queryformat", "%{NAME}\n"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -266,16 +172,179 @@ def detect_installed_cuda_version() -> str | None:
         if result.returncode != 0:
             return None
 
-        for line in result.stdout.splitlines():
-            if "release" in line:
-                import re
+        cuda_pkgs = [
+            line
+            for line in result.stdout.splitlines()
+            if "cuda-toolkit" in line or re.match(r"cuda-\d+\.\d+", line)
+        ]
 
-                match = re.search(r"release (\d+\.\d+)", line)
-                if match:
-                    return match.group(1)
-        return None
+        for pkg in cuda_pkgs:
+            version = _parse_cuda_version_from_package(pkg)
+            if version:
+                return version
+    except FileNotFoundError:
+        pass
     except subprocess.TimeoutExpired:
-        return None
+        pass
+    except Exception:
+        pass
+    return None
+
+
+def _detect_via_dpkg() -> str | None:
+    """Query DPKG for installed CUDA packages.
+
+    Returns:
+        CUDA version string (e.g., "12.6") or None if not found.
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["dpkg", "-l", "cuda*"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode not in (0, 1):
+            return None
+
+        for line in result.stdout.splitlines():
+            if line.startswith("ii") and ("cuda-toolkit" in line or "cuda-" in line):
+                parts = line.split()
+                if len(parts) >= 2:
+                    pkg_name = parts[1]
+                    version = _parse_cuda_version_from_package(pkg_name)
+                    if version:
+                        return version
+    except FileNotFoundError:
+        pass
+    except subprocess.TimeoutExpired:
+        pass
+    except Exception:
+        pass
+    return None
+
+
+def _detect_via_pacman() -> str | None:
+    """Query pacman for installed CUDA packages.
+
+    Returns:
+        CUDA version string (e.g., "12.6") or None if not found.
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["pacman", "-Q", "cuda"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            return None
+
+        parts = result.stdout.split()
+        if len(parts) >= 2:
+            pkg_name = parts[0]
+            if pkg_name == "cuda":
+                version = _parse_cuda_version_from_package(parts[1])
+                if version:
+                    return version
+    except FileNotFoundError:
+        pass
+    except subprocess.TimeoutExpired:
+        pass
+    except Exception:
+        pass
+    return None
+
+
+def detect_installed_cuda_version() -> str | None:
+    """Detect installed CUDA version via package manager queries.
+
+    Queries RPM (Fedora/RHEL), DPKG (Ubuntu/Debian), or pacman (Arch) for CUDA packages.
+
+    Returns:
+        CUDA version string (e.g., "12.2") or None if not installed.
+    """
+    cuda_version = _detect_via_rpm()
+    if cuda_version:
+        return cuda_version
+
+    cuda_version = _detect_via_dpkg()
+    if cuda_version:
+        return cuda_version
+
+    cuda_version = _detect_via_pacman()
+    if cuda_version:
+        return cuda_version
+
+    return None
+
+
+def setup_cuda_environment() -> tuple[bool, str]:
+    """Create /etc/profile.d/cuda.sh to add CUDA to PATH and LD_LIBRARY_PATH.
+
+    Returns:
+        Tuple of (success, message)
+    """
+    import subprocess
+
+    profile_script = "/etc/profile.d/cuda.sh"
+    content = """# CUDA environment setup - managed by nvidia-inst
+if [ -d /usr/local/cuda ]; then
+    export PATH=/usr/local/cuda/bin:$PATH
+    export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+fi
+"""
+
+    try:
+        result = subprocess.run(
+            ["sudo", "tee", profile_script],
+            input=content,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            subprocess.run(
+                ["sudo", "chmod", "0644", profile_script],
+                capture_output=True,
+                timeout=10,
+            )
+            return True, f"Created {profile_script}"
+        else:
+            return False, f"Failed to create {profile_script}: {result.stderr}"
+    except subprocess.TimeoutExpired:
+        return False, "Timeout creating CUDA environment script"
+    except Exception as e:
+        return False, f"Error creating CUDA environment: {e}"
+
+
+def remove_cuda_environment() -> tuple[bool, str]:
+    """Remove /etc/profile.d/cuda.sh created by nvidia-inst.
+
+    Returns:
+        Tuple of (success, message)
+    """
+    import subprocess
+
+    profile_script = "/etc/profile.d/cuda.sh"
+
+    try:
+        result = subprocess.run(
+            ["sudo", "rm", "-f", profile_script],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            return True, f"Removed {profile_script}"
+        else:
+            return False, f"Failed to remove {profile_script}: {result.stderr}"
+    except Exception as e:
+        return False, f"Error removing CUDA environment: {e}"
 
 
 def get_cuda_packages_for_version(distro_id: str, cuda_version: str) -> list[str]:

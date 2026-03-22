@@ -103,6 +103,17 @@ def revert_to_nouveau(distro_id: str) -> RevertResult:
 
     _remove_blacklist()
 
+    # Remove CUDA environment script
+    try:
+        subprocess.run(
+            ["sudo", "rm", "-f", "/etc/profile.d/cuda.sh"],
+            capture_output=True,
+            timeout=10,
+        )
+        logger.info("Removed /etc/profile.d/cuda.sh")
+    except Exception as e:
+        logger.warning(f"Failed to remove cuda.sh: {e}")
+
     initramfs_result = _rebuild_initramfs(distro_id)
     if not initramfs_result:
         result.errors.append("Failed to rebuild initramfs")
@@ -343,23 +354,48 @@ def _remove_packages(distro_id: str, packages: list[str]) -> list[str]:
 
 
 def _remove_versionlock_entries(packages: list[str]) -> list[str]:
-    """Remove versionlock entries for packages on Fedora/RHEL."""
+    """Remove versionlock entries for packages on Fedora/RHEL.
+
+    Tries multiple patterns to ensure complete removal:
+    1. Original pattern (e.g., akmod-nvidia-580.*)
+    2. Package name without version (e.g., akmod-nvidia-*)
+    3. Just the package base name (e.g., akmod-nvidia)
+    """
     removed = []
     for pkg_pattern in packages:
-        try:
-            result = subprocess.run(
-                ["dnf", "versionlock", "delete", pkg_pattern],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            if result.returncode == 0:
-                removed.append(pkg_pattern)
-                logger.info(f"Removed versionlock: {pkg_pattern}")
-            elif "No matches" not in result.stderr:
-                logger.warning(f"Versionlock removal warning: {result.stderr}")
-        except Exception as e:
-            logger.warning(f"Failed to remove versionlock for {pkg_pattern}: {e}")
+        patterns_to_try = [
+            pkg_pattern,
+            (
+                pkg_pattern.rsplit("-", 1)[0]
+                if pkg_pattern.count("-") > 1
+                else pkg_pattern
+            ),
+            (
+                pkg_pattern.split("-")[0] + "-" + pkg_pattern.split("-")[1]
+                if pkg_pattern.count("-") > 1
+                else pkg_pattern
+            ),
+        ]
+
+        patterns_to_try = list(dict.fromkeys(patterns_to_try))
+
+        for pattern in patterns_to_try:
+            try:
+                result = subprocess.run(
+                    ["dnf", "versionlock", "delete", pattern],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                if result.returncode == 0:
+                    removed.append(pattern)
+                    logger.info(f"Removed versionlock: {pattern}")
+                elif (
+                    "No matches" not in result.stderr and "No such" not in result.stderr
+                ):
+                    logger.warning(f"Versionlock removal warning: {result.stderr}")
+            except Exception as e:
+                logger.warning(f"Failed to remove versionlock for {pattern}: {e}")
     return removed
 
 

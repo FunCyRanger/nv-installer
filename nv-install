@@ -32,6 +32,12 @@ if ! command -v python3 &>/dev/null; then
     exit 1
 fi
 
+# Uninstall pip-installed nvidia-inst to ensure local version is used
+if python3 -m pip show nvidia-inst &>/dev/null; then
+    echo "Removing pip-installed nvidia-inst to use local version..."
+    python3 -m pip uninstall -y nvidia-inst 2>/dev/null || true
+fi
+
 # Check if module directory exists
 if [[ ! -d "$SCRIPT_DIR/src/nvidia_inst" ]]; then
     echo "Error: nvidia_inst module not found at $SCRIPT_DIR/src/nvidia_inst" >&2
@@ -45,7 +51,7 @@ export PYTHONPATH="$SCRIPT_DIR/src"
 if ! python3 -c "import nvidia_inst" 2>/dev/null; then
     echo "Warning: nvidia_inst module cannot be imported." >&2
     echo "If you haven't installed dependencies, run:" >&2
-    echo "  pip install -r requirements.txt" >&2
+    echo "  python3 -m pip install -r requirements.txt" >&2
     echo "Continuing anyway..." >&2
 fi
 

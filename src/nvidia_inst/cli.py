@@ -5,6 +5,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -1132,42 +1133,17 @@ def _install_cuda_packages(distro: DistroInfo, cuda_version: str | None = None) 
 
 
 def _verify_cuda_installation() -> tuple[bool, str]:
-    """Verify CUDA installation by checking nvcc --version.
+    """Verify CUDA installation by querying package manager.
 
     Returns:
         Tuple of (success, version_string or error message)
     """
-    import subprocess
+    from nvidia_inst.installer.cuda import detect_installed_cuda_version
 
-    from nvidia_inst.utils.system import find_nvcc
-
-    nvcc_path = find_nvcc()
-    if not nvcc_path:
-        return False, "nvcc not found in PATH or known locations"
-
-    try:
-        result = subprocess.run(
-            [nvcc_path, "--version"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode == 0:
-            # Extract version from output
-            for line in result.stdout.splitlines():
-                if "release" in line:
-                    import re
-
-                    match = re.search(r"release (\d+\.\d+)", line)
-                    if match:
-                        return True, f"nvcc {match.group(1)}"
-            return True, "nvcc installed (version unknown)"
-        else:
-            return False, f"nvcc failed: {result.stderr[:100]}"
-    except subprocess.TimeoutExpired:
-        return False, "nvcc timeout"
-    except Exception as e:
-        return False, f"nvcc error: {e}"
+    cuda_version = detect_installed_cuda_version()
+    if cuda_version:
+        return True, f"CUDA {cuda_version} installed"
+    return False, "CUDA not detected via package manager"
 
 
 def _prompt_reboot() -> None:
@@ -1611,6 +1587,8 @@ def execute_driver_change(
             print("\n[ERROR] Root privileges required to install drivers.")
             return 1
 
+        import subprocess
+
         # Detect if we can lock before install (Pacman cannot)
         pkg_manager = get_package_manager()
         can_lock_before = pkg_manager.__class__.__name__ != "PacmanManager"
@@ -1651,46 +1629,157 @@ def execute_driver_change(
                 print(f"           Removed: {', '.join(removed)}")
         step += 1
 
-        # ===== STEP 2-3: Apply locks BEFORE install (if supported) =====
+        # ===== STEP 2: Remove incompatible CUDA if needed =====
+        if needs_cuda_lock and driver_range.cuda_locked_major and with_cuda:
+            from nvidia_inst.installer.cuda import detect_installed_cuda_version
+
+            installed_cuda = detect_installed_cuda_version()
+            if installed_cuda:
+                installed_major = installed_cuda.split(".")[0]
+                if installed_major != driver_range.cuda_locked_major:
+                    print(
+                        f"\n[Step {step}] Removing incompatible CUDA {installed_cuda}..."
+                    )
+                    try:
+                        if distro.id in ("fedora", "rhel", "centos", "rocky", "alma"):
+                            dnf_path = _detect_dnf_path()
+                            result = subprocess.run(
+                                [
+                                    sudo_path(),
+                                    dnf_path,
+                                    "remove",
+                                    "-y",
+                                    "cuda*",
+                                    "libnv*",
+                                    "libcuda*",
+                                    "nvidia-libcuda*",
+                                ],
+                                capture_output=True,
+                                text=True,
+                                timeout=180,
+                            )
+                            if result.returncode == 0:
+                                print("           Incompatible CUDA removed")
+                            else:
+                                logger.warning(f"CUDA removal warning: {result.stderr}")
+                                print(
+                                    "           [WARNING] Some CUDA packages may remain"
+                                )
+                        elif distro.id in ("ubuntu", "debian", "linuxmint", "pop"):
+                            result = subprocess.run(
+                                [
+                                    "sudo",
+                                    "apt-get",
+                                    "remove",
+                                    "-y",
+                                    "--purge",
+                                    "^cuda.*",
+                                    "^libcuda.*",
+                                    "^libnvidia.*",
+                                ],
+                                capture_output=True,
+                                text=True,
+                                timeout=180,
+                            )
+                            if result.returncode == 0:
+                                print("           Incompatible CUDA removed")
+                            else:
+                                logger.warning(f"CUDA removal warning: {result.stderr}")
+                                print(
+                                    "           [WARNING] Some CUDA packages may remain"
+                                )
+                    except subprocess.TimeoutExpired:
+                        logger.error("CUDA removal timed out")
+                        print("           [WARNING] CUDA removal timed out")
+                    except Exception as e:
+                        logger.error(f"CUDA removal error: {e}")
+                        print("           [WARNING] CUDA removal failed")
+            step += 1
+
+        # ===== STEP 3-4: Apply locks BEFORE install (if supported) =====
         if can_lock_before and needs_driver_lock and driver_range.max_branch:
             print(
                 f"\n[Step {step}] Locking driver to branch {driver_range.max_branch}.*"
             )
-            lock_cmd = _get_driver_lock_command(distro.id, driver_range.max_branch)
-            logger.info(f"Executing: {lock_cmd}")
-            import subprocess
+            try:
+                # Add pattern-based versionlock for driver
+                driver_pattern = f"akmod-nvidia-{driver_range.max_branch}.*"
+                driver_lock_success, driver_lock_msg = _add_pattern_versionlock_entry(
+                    driver_pattern,
+                    driver_range.max_branch,
+                    f"Lock NVIDIA driver to branch {driver_range.max_branch}.x",
+                )
 
-            lock_result = subprocess.run(
-                lock_cmd, shell=True, capture_output=True, text=True
-            )
-            if lock_result.returncode == 0:
-                print("           Driver lock applied")
-            else:
-                logger.warning(f"Driver lock failed: {lock_result.stderr}")
-                print("           [WARNING] Driver lock failed")
+                if driver_lock_success:
+                    # Verify the lock
+                    verified, verify_msg = _verify_versionlock_pattern_active(
+                        driver_pattern, driver_range.max_branch
+                    )
+                    if verified:
+                        print(f"           Driver lock applied: {verify_msg}")
+                    else:
+                        print(f"           Driver lock warning: {verify_msg}")
+                else:
+                    print(f"           [ERROR] Driver lock failed: {driver_lock_msg}")
+                    return 1
+
+            except subprocess.TimeoutExpired:
+                logger.error("Driver lock command timed out")
+                print("           [ERROR] Driver lock timed out")
+                return 1
+            except Exception as e:
+                logger.error(f"Driver lock exception: {e}")
+                print(f"           [ERROR] Driver lock failed: {e}")
+                return 1
             step += 1
 
         if can_lock_before and needs_cuda_lock and driver_range.cuda_locked_major:
             print(
                 f"\n[Step {step}] Locking CUDA to major version {driver_range.cuda_locked_major}-*"
             )
-            cuda_lock_cmd = _get_cuda_lock_command(
-                distro.id, driver_range.cuda_locked_major
-            )
-            logger.info(f"Executing: {cuda_lock_cmd}")
-            import subprocess
+            try:
+                # First, ensure CUDA repository is available
+                cuda_repo_added, cuda_repo_msg = _add_cuda_repo(
+                    distro.id, distro.version_id, driver_range.cuda_locked_major
+                )
+                if not cuda_repo_added:
+                    print(f"           [WARNING] {cuda_repo_msg}")
+                    print("           Attempting to lock anyway...")
+                else:
+                    print(f"           {cuda_repo_msg}")
 
-            lock_result = subprocess.run(
-                cuda_lock_cmd, shell=True, capture_output=True, text=True
-            )
-            if lock_result.returncode == 0:
-                print("           CUDA lock applied")
-            else:
-                logger.warning(f"CUDA lock failed: {lock_result.stderr}")
-                print("           [WARNING] CUDA lock failed")
+                # Add pattern-based versionlock for CUDA
+                cuda_pattern = f"cuda-toolkit-{driver_range.cuda_locked_major}.*"
+                cuda_lock_success, cuda_lock_msg = _add_pattern_versionlock_entry(
+                    cuda_pattern,
+                    driver_range.cuda_locked_major,
+                    f"Lock CUDA toolkit to major version {driver_range.cuda_locked_major}.x",
+                )
+
+                if cuda_lock_success:
+                    # Verify the lock
+                    verified, verify_msg = _verify_versionlock_pattern_active(
+                        cuda_pattern, driver_range.cuda_locked_major
+                    )
+                    if verified:
+                        print(f"           CUDA lock applied: {verify_msg}")
+                    else:
+                        print(f"           CUDA lock warning: {verify_msg}")
+                else:
+                    print(f"           [ERROR] CUDA lock failed: {cuda_lock_msg}")
+                    return 1
+
+            except subprocess.TimeoutExpired:
+                logger.error("CUDA lock command timed out")
+                print("           [ERROR] CUDA lock timed out")
+                return 1
+            except Exception as e:
+                logger.error(f"CUDA lock exception: {e}")
+                print(f"           [ERROR] CUDA lock failed: {e}")
+                return 1
             step += 1
 
-        # ===== STEP 2/4: Install ALL packages (driver + CUDA together) =====
+        # ===== STEP 4-5: Install ALL packages (driver + CUDA together) =====
         print(f"\n[Step {step}] Installing packages...")
         print(
             f"           {' '.join(all_packages[:5])}{'...' if len(all_packages) > 5 else ''}"
@@ -1701,46 +1790,106 @@ def execute_driver_change(
         except Exception as e:
             logger.error(f"Installation failed: {e}")
             print(f"           Installation failed: {e}")
-            return 1
         step += 1
 
-        # ===== STEP 3/5: Apply locks AFTER install (Pacman only) =====
+        # ===== STEP 5/6: Apply locks AFTER install (Pacman only) =====
         if not can_lock_before and needs_driver_lock and driver_range.max_branch:
             print(
                 f"\n[Step {step}] Locking driver to branch {driver_range.max_branch}.*"
             )
-            lock_cmd = _get_driver_lock_command(distro.id, driver_range.max_branch)
-            logger.info(f"Executing: {lock_cmd}")
-            import subprocess
+            try:
+                lock_cmd = _get_driver_lock_command(distro.id, driver_range.max_branch)
+                logger.info(f"Executing: {' '.join(lock_cmd)}")
+                result = subprocess.run(
+                    lock_cmd, capture_output=True, text=True, timeout=30
+                )
 
-            lock_result = subprocess.run(
-                lock_cmd, shell=True, capture_output=True, text=True
-            )
-            if lock_result.returncode == 0:
-                print("           Driver lock applied")
-            else:
-                logger.warning(f"Driver lock failed: {lock_result.stderr}")
-                print("           [WARNING] Driver lock failed")
+                if result.returncode != 0:
+                    error_msg = (
+                        result.stderr.strip() if result.stderr else "Unknown error"
+                    )
+                    logger.error(f"Driver lock command failed: {error_msg}")
+                    print(f"           [ERROR] Driver lock failed: {error_msg}")
+                    return 1
+
+                # Verify the lock
+                lock_pattern = f"akmod-nvidia-{driver_range.max_branch}.*"
+                verified, verify_msg = _verify_versionlock_pattern(
+                    distro.id, lock_pattern, "driver"
+                )
+
+                if verified:
+                    print(f"           Driver lock applied: {verify_msg}")
+                else:
+                    print(
+                        f"           [ERROR] Driver lock verification failed: {verify_msg}"
+                    )
+                    print("           Installation aborted")
+                    return 1
+
+            except subprocess.TimeoutExpired:
+                logger.error("Driver lock command timed out")
+                print("           [ERROR] Driver lock timed out")
+                return 1
+            except Exception as e:
+                logger.error(f"Driver lock exception: {e}")
+                print(f"           [ERROR] Driver lock failed: {e}")
+                return 1
             step += 1
 
         if not can_lock_before and needs_cuda_lock and driver_range.cuda_locked_major:
             print(
                 f"\n[Step {step}] Locking CUDA to major version {driver_range.cuda_locked_major}-*"
             )
-            cuda_lock_cmd = _get_cuda_lock_command(
-                distro.id, driver_range.cuda_locked_major
-            )
-            logger.info(f"Executing: {cuda_lock_cmd}")
-            import subprocess
+            try:
+                # First, ensure CUDA repository is available
+                cuda_repo_added, cuda_repo_msg = _add_cuda_repo(
+                    distro.id, distro.version_id, driver_range.cuda_locked_major
+                )
+                if not cuda_repo_added:
+                    print(f"           [WARNING] {cuda_repo_msg}")
+                    print("           Attempting to lock anyway...")
+                else:
+                    print(f"           {cuda_repo_msg}")
 
-            lock_result = subprocess.run(
-                cuda_lock_cmd, shell=True, capture_output=True, text=True
-            )
-            if lock_result.returncode == 0:
-                print("           CUDA lock applied")
-            else:
-                logger.warning(f"CUDA lock failed: {lock_result.stderr}")
-                print("           [WARNING] CUDA lock failed")
+                lock_cmd = _get_cuda_lock_command(
+                    distro.id, driver_range.cuda_locked_major
+                )
+                logger.info(f"Executing: {' '.join(lock_cmd)}")
+                result = subprocess.run(
+                    lock_cmd, capture_output=True, text=True, timeout=30
+                )
+
+                if result.returncode != 0:
+                    error_msg = (
+                        result.stderr.strip() if result.stderr else "Unknown error"
+                    )
+                    logger.error(f"CUDA lock command failed: {error_msg}")
+                    print(f"           [ERROR] CUDA lock failed: {error_msg}")
+                    return 1
+
+                # Verify the lock
+                lock_pattern = f"cuda-toolkit-{driver_range.cuda_locked_major}-*"
+                verified, verify_msg = _verify_versionlock_pattern(
+                    distro.id, lock_pattern, "cuda"
+                )
+
+                if verified:
+                    print(f"           CUDA lock applied: {verify_msg}")
+                else:
+                    print(
+                        f"           [ERROR] CUDA lock verification failed: {verify_msg}"
+                    )
+                    print("           Installation aborted")
+                    return 1
+            except subprocess.TimeoutExpired:
+                logger.error("CUDA lock command timed out")
+                print("           [ERROR] CUDA lock timed out")
+                return 1
+            except Exception as e:
+                logger.error(f"CUDA lock exception: {e}")
+                print(f"           [ERROR] CUDA lock failed: {e}")
+                return 1
             step += 1
 
         # ===== Common post-install steps =====
@@ -1775,6 +1924,25 @@ def execute_driver_change(
                     "           [WARNING] CUDA verification failed - nvcc not working"
                 )
             step += 1
+
+            # Setup CUDA environment for PATH
+            from nvidia_inst.installer.cuda import setup_cuda_environment
+
+            cuda_env_ok, cuda_env_msg = setup_cuda_environment()
+            if cuda_env_ok:
+                print(f"\n[Step {step}] Setting up CUDA environment...")
+                print("           CUDA added to PATH via /etc/profile.d/cuda.sh")
+                print(
+                    "           (Restart shell or run: source /etc/profile.d/cuda.sh)"
+                )
+                step += 1
+            else:
+                print(
+                    f"\n[WARNING] Could not create CUDA environment script: {cuda_env_msg}"
+                )
+                print(
+                    "           Manually add to PATH: export PATH=/usr/local/cuda/bin:$PATH"
+                )
 
         print("\n" + "=" * 50)
         print("  Installation completed successfully!")
@@ -2269,18 +2437,29 @@ def _print_action_plan(
         if nouveau_loaded:
             print(f"│  {step}. {_get_nouveau_remove_command(distro.id):<55}│")
             step += 1
-        # Lock driver BEFORE install (if limited/EOL)
+        # Lock driver BEFORE install (if limited/EOL) - pattern-based
         if driver_range.is_limited and driver_range.max_branch:
-            print(
-                f"│  {step}. {_get_driver_lock_command(distro.id, driver_range.max_branch):<55}│"
-            )
+            pattern = f"akmod-nvidia-{driver_range.max_branch}.*"
+            lock_str = f"Lock {pattern} to branch {driver_range.max_branch}.x (TOML)"
+            print(f"│  {step}. {lock_str:<55}│")
             step += 1
-        # Lock CUDA BEFORE install (if locked)
+        # Lock CUDA BEFORE install (if locked) - pattern-based
         if driver_range.cuda_is_locked and driver_range.cuda_locked_major:
-            print(
-                f"│  {step}. {_get_cuda_lock_command(distro.id, driver_range.cuda_locked_major):<55}│"
-            )
+            cuda_pattern = f"cuda-toolkit-{driver_range.cuda_locked_major}.*"
+            cuda_lock_str = f"Lock {cuda_pattern} to branch {driver_range.cuda_locked_major}.x (TOML)"
+            print(f"│  {step}. {cuda_lock_str:<55}│")
             step += 1
+        # Remove incompatible CUDA if needed
+        if (
+            driver_range.cuda_is_locked
+            and driver_range.cuda_locked_major
+            and installed_cuda
+        ):
+            installed_major = installed_cuda.split(".")[0]
+            if installed_major != driver_range.cuda_locked_major:
+                remove_cuda_str = f"Remove incompatible CUDA {installed_cuda}"
+                print(f"│  {step}. {remove_cuda_str:<55}│")
+                step += 1
         # Install driver + CUDA together
         all_pkgs = packages + (cuda_pkgs if cuda_pkgs else [])
         print(f"│  {step}. {_get_install_command(distro.id, all_pkgs):<55}│")
@@ -2503,27 +2682,41 @@ def _run_dry_run(
     print(f"│  {step}. {update_cmd:<56} │")
     step += 1
 
-    # Step 1b: Remove if needed
+    # Step 1b: Remove nouveau if needed
     if nouveau_loaded:
         remove_cmd = _get_nouveau_remove_command(distro.id)
         print(f"│  {step}. {remove_cmd:<56} │")
         step += 1
 
-    # Step 2: Lock driver BEFORE install (if limited/EOL)
+    # Step 2: Remove incompatible CUDA if needed
+    if (
+        driver_range.cuda_is_locked
+        and driver_range.cuda_locked_major
+        and installed_cuda
+    ):
+        installed_major = installed_cuda.split(".")[0]
+        if installed_major != driver_range.cuda_locked_major:
+            remove_cuda_str = f"Remove incompatible CUDA {installed_cuda}"
+            print(f"│  {step}. {remove_cuda_str:<56} │")
+            step += 1
+
+    # Step 3: Lock driver BEFORE install (if limited/EOL) - pattern-based
     if driver_range.is_limited and driver_range.max_branch:
-        lock_cmd = _get_driver_lock_command(distro.id, driver_range.max_branch)
-        print(f"│  {step}. {lock_cmd:<56} │")
+        pattern = f"akmod-nvidia-{driver_range.max_branch}.*"
+        lock_str = f"Lock {pattern} to branch {driver_range.max_branch}.x (TOML)"
+        print(f"│  {step}. {lock_str:<56} │")
         step += 1
 
-    # Step 3: Lock CUDA BEFORE install (if locked)
+    # Step 4: Lock CUDA BEFORE install (if locked) - pattern-based
     if driver_range.cuda_is_locked and driver_range.cuda_locked_major:
-        cuda_lock_cmd = _get_cuda_lock_command(
-            distro.id, driver_range.cuda_locked_major
+        cuda_pattern = f"cuda-toolkit-{driver_range.cuda_locked_major}.*"
+        cuda_lock_str = (
+            f"Lock {cuda_pattern} to branch {driver_range.cuda_locked_major}.x (TOML)"
         )
-        print(f"│  {step}. {cuda_lock_cmd:<56} │")
+        print(f"│  {step}. {cuda_lock_str:<56} │")
         step += 1
 
-    # Step 4: Install driver + CUDA together
+    # Step 5: Install driver + CUDA together
     all_pkgs = packages + (cuda_pkgs if cuda_pkgs else [])
     install_cmd = _get_install_command(distro.id, all_pkgs)
     print(f"│  {step}. {install_cmd:<56} │")
@@ -2609,6 +2802,371 @@ def _check_cuda_repo_status(distro_id: str, version_id: str) -> str:
         return "[?] Unknown"
 
 
+def _add_cuda_repo(
+    distro_id: str, distro_version: str, cuda_major: str | None = None
+) -> tuple[bool, str]:
+    """Add CUDA repository for the distribution.
+
+    Args:
+        distro_id: Distribution ID
+        distro_version: Distribution version
+        cuda_major: CUDA major version for version-locked installs (e.g., "12")
+
+    Returns:
+        Tuple of (success, message)
+    """
+    import subprocess
+
+    try:
+        from nvidia_inst.installer.prerequisites import PrerequisitesChecker
+
+        checker = PrerequisitesChecker()
+        fix_commands = checker.get_cuda_repo_fix_commands(
+            distro_id, distro_version, cuda_major
+        )
+
+        if not fix_commands:
+            # Repo already configured, verify packages are available
+            return True, "CUDA repository already configured"
+
+        # Add the repository
+        print("           Adding CUDA repository...")
+        for cmd_str in fix_commands:
+            logger.info(f"Adding CUDA repository: {cmd_str}")
+            result = subprocess.run(
+                cmd_str, shell=True, capture_output=True, text=True, timeout=120
+            )
+
+            if result.returncode != 0:
+                error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+                logger.error(f"Failed to add CUDA repo: {error_msg}")
+                return False, f"Failed to add CUDA repo: {error_msg}"
+
+        # Refresh dnf cache after adding repo
+        print("           Refreshing package cache...")
+        dnf_path = _detect_dnf_path()
+        makecache_result = subprocess.run(
+            [sudo_path(), dnf_path, "makecache"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+
+        if makecache_result.returncode != 0:
+            error_msg = (
+                makecache_result.stderr.strip()
+                if makecache_result.stderr
+                else "Unknown error"
+            )
+            logger.error(f"Failed to refresh package cache: {error_msg}")
+            return False, f"Failed to refresh package cache: {error_msg}"
+
+        print("           Verifying repository was added...")
+        # Verify repo was actually added
+        cuda_repo = checker._repo_exists("cuda-fedora")
+        if not cuda_repo:
+            cuda_repo = checker._repo_exists(f"cuda-fedora{distro_version}")
+
+        if not cuda_repo:
+            logger.error("CUDA repository was not added successfully")
+            return False, "CUDA repository was not added - repository not found"
+
+        print("           Verifying CUDA packages are available...")
+        # Verify packages are available (for Fedora)
+        if distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
+            # Check if any cuda-toolkit packages are available
+            repoquery_result = subprocess.run(
+                [
+                    sudo_path(),
+                    dnf_path,
+                    "repoquery",
+                    "cuda-toolkit*",
+                    "--available",
+                    "--qf",
+                    "%{name}",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+
+            if repoquery_result.returncode == 0 and repoquery_result.stdout.strip():
+                available_pkgs = repoquery_result.stdout.strip().split("\n")
+                print(f"           Found {len(available_pkgs)} CUDA packages in repos")
+            else:
+                logger.warning("No CUDA packages found in repositories")
+                return False, "No CUDA packages found in repositories after adding repo"
+
+        return True, "CUDA repository added successfully"
+
+    except subprocess.TimeoutExpired:
+        return False, "CUDA repo addition timed out"
+    except Exception as e:
+        logger.error(f"Failed to add CUDA repo: {e}")
+        return False, f"Failed to add CUDA repo: {e}"
+
+
+def _read_versionlock_toml() -> dict:
+    """Read and parse the versionlock TOML file.
+
+    Returns:
+        Dictionary representing the TOML file, or empty structure if file doesn't exist.
+    """
+    import tomllib
+
+    versionlock_path = Path("/etc/dnf/versionlock.toml")
+
+    if not versionlock_path.exists():
+        return {"version": "1.0", "packages": []}
+
+    try:
+        result = subprocess.run(
+            ["sudo", "cat", str(versionlock_path)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            logger.error("Failed to read versionlock.toml: sudo cat failed")
+            return {"version": "1.0", "packages": []}
+
+        data = tomllib.loads(result.stdout)
+        return data
+    except Exception as e:
+        logger.error(f"Failed to read versionlock.toml: {e}")
+        return {"version": "1.0", "packages": []}
+
+
+def _write_versionlock_toml(data: dict) -> tuple[bool, str]:
+    """Write the versionlock TOML file safely with backup and rollback using sudo.
+
+    Args:
+        data: Dictionary to write as TOML
+
+    Returns:
+        Tuple of (success, message)
+    """
+    import os
+    import tempfile
+
+    versionlock_path = Path("/etc/dnf/versionlock.toml")
+    backup_path = versionlock_path.with_suffix(".toml.backup")
+
+    try:
+        # 1. Generate TOML content
+        toml_output = f'version = "{data.get("version", "1.0")}"\n'
+
+        for pkg in data.get("packages", []):
+            toml_output += "\n[[packages]]\n"
+            toml_output += f'name = "{pkg.get("name", "")}"\n'
+
+            if pkg.get("comment"):
+                toml_output += f'comment = "{pkg.get("comment")}"\n'
+
+            for cond in pkg.get("conditions", []):
+                toml_output += "[[packages.conditions]]\n"
+                toml_output += f'key = "{cond.get("key", "")}"\n'
+                toml_output += f'comparator = "{cond.get("comparator", "")}"\n'
+                toml_output += f'value = "{cond.get("value", "")}"\n'
+
+        # 2. Create backup of existing file using sudo
+        if versionlock_path.exists():
+            result = subprocess.run(
+                ["sudo", "cp", str(versionlock_path), str(backup_path)],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                logger.info(f"Created backup: {backup_path}")
+            else:
+                logger.warning(f"Could not create backup: {result.stderr}")
+
+        # 3. Write to temporary file first (user can write to /tmp without sudo)
+        temp_fd, temp_path = tempfile.mkstemp(suffix=".toml")
+        os.write(temp_fd, toml_output.encode())
+        os.close(temp_fd)
+
+        # 4. Validate the written TOML locally
+        try:
+            import tomllib
+
+            with open(temp_path, "rb") as f:
+                tomllib.load(f)
+        except Exception as e:
+            logger.error(f"Written TOML is invalid: {e}")
+            os.unlink(temp_path)
+            return False, f"Generated invalid TOML: {e}"
+
+        # 5. Copy temp file to actual location using sudo
+        result = subprocess.run(
+            ["sudo", "cp", temp_path, str(versionlock_path)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        os.unlink(temp_path)  # Clean up temp file
+
+        if result.returncode != 0:
+            logger.error(f"Failed to write versionlock.toml: {result.stderr}")
+            # Try rollback
+            if backup_path.exists():
+                rollback_result = subprocess.run(
+                    ["sudo", "cp", str(backup_path), str(versionlock_path)],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if rollback_result.returncode == 0:
+                    logger.info("Rolled back to backup versionlock.toml")
+                    return False, f"Write failed, rolled back: {result.stderr}"
+            return False, f"Write failed: {result.stderr}"
+
+        # 6. Verify the file was written correctly using sudo
+        verify_result = subprocess.run(
+            ["sudo", "cat", str(versionlock_path)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        if verify_result.returncode != 0:
+            logger.error("Verification failed: could not read written file")
+            return False, "Verification failed: could not read written file"
+
+        logger.info("Wrote versionlock.toml successfully")
+        return True, "Versionlock file written successfully"
+
+    except Exception as e:
+        logger.error(f"Failed to write versionlock.toml: {e}")
+        # Try rollback
+        if backup_path.exists():
+            rollback_result = subprocess.run(
+                ["sudo", "cp", str(backup_path), str(versionlock_path)],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if rollback_result.returncode == 0:
+                logger.info("Rolled back to backup versionlock.toml")
+                return False, f"Write failed, rolled back: {e}"
+        return False, f"Write failed: {e}"
+
+
+def _pattern_entry_exists(data: dict, pattern: str) -> bool:
+    """Check if a pattern entry already exists in the versionlock data.
+
+    Args:
+        data: Parsed TOML data
+        pattern: Package pattern to check (e.g., 'cuda-toolkit-12.*')
+
+    Returns:
+        True if entry exists, False otherwise.
+    """
+    return any(pkg.get("name") == pattern for pkg in data.get("packages", []))
+
+
+def _add_pattern_versionlock_entry(
+    package_pattern: str, major_version: str, comment: str = ""
+) -> tuple[bool, str]:
+    """Add pattern-based versionlock entry to lock to a major version.
+
+    Uses direct TOML file editing for true pattern-based branch locking.
+    Allows minor/bugfix updates within the branch while blocking major version changes.
+
+    Args:
+        package_pattern: Package name pattern (e.g., 'cuda-toolkit-12.*' or 'akmod-nvidia-580.*')
+        major_version: Major version to lock (e.g., '12' or '580')
+        comment: Optional description
+
+    Returns:
+        Tuple of (success, message)
+    """
+    # Read current versionlock
+    data = _read_versionlock_toml()
+
+    # Check if entry already exists
+    if _pattern_entry_exists(data, package_pattern):
+        logger.info(f"Pattern {package_pattern} already locked")
+        return True, f"Pattern {package_pattern} already locked"
+
+    # Create new entry with branch-based conditions
+    # Lock to: major_version <= X < major_version + 1
+    next_major = str(int(major_version) + 1)
+
+    new_entry = {
+        "name": package_pattern,
+        "conditions": [
+            {"key": "evr", "comparator": ">=", "value": major_version},
+            {"key": "evr", "comparator": "<", "value": next_major},
+        ],
+    }
+
+    if comment:
+        new_entry["comment"] = comment
+
+    # Add to packages list
+    if "packages" not in data:
+        data["packages"] = []
+    if "version" not in data:
+        data["version"] = "1.0"
+
+    data["packages"].append(new_entry)
+
+    # Write safely with backup
+    success, msg = _write_versionlock_toml(data)
+
+    if success:
+        logger.info(f"Added versionlock entry: {package_pattern} ({major_version}.x)")
+        return True, f"Locked {package_pattern} to major version {major_version}.x"
+
+    return False, msg
+
+
+def _verify_versionlock_pattern_active(
+    package_pattern: str, major_version: str
+) -> tuple[bool, str]:
+    """Verify that a pattern-based versionlock entry is active and correct.
+
+    Args:
+        package_pattern: Package pattern (e.g., 'cuda-toolkit-12.*')
+        major_version: Major version that should be locked
+
+    Returns:
+        Tuple of (success, status_message)
+    """
+    data = _read_versionlock_toml()
+
+    for pkg in data.get("packages", []):
+        if pkg.get("name") == package_pattern:
+            conditions = pkg.get("conditions", [])
+            # Check if we have >= and < conditions
+            has_lower = False
+            has_upper = False
+
+            for cond in conditions:
+                if cond.get("key") == "evr":
+                    if (
+                        cond.get("comparator") == ">="
+                        and cond.get("value") == major_version
+                    ):
+                        has_lower = True
+                    if cond.get("comparator") == "<" and cond.get("value") == str(
+                        int(major_version) + 1
+                    ):
+                        has_upper = True
+
+            if has_lower and has_upper:
+                return (
+                    True,
+                    f"Pattern {package_pattern} verified: locked to {major_version}.x",
+                )
+
+            return True, f"Pattern {package_pattern} exists but conditions differ"
+
+    return False, f"No versionlock entry found for {package_pattern}"
+
+
 def _get_update_command(distro_id: str) -> str:
     """Get package update command."""
     commands = {
@@ -2658,45 +3216,273 @@ def _detect_dnf_version() -> str:
         return "dnf4"  # Default to dnf4 for safety
 
 
-def _get_driver_lock_command(distro_id: str, branch: str) -> str:
+def _detect_dnf_path() -> str:
+    """Detect the correct dnf executable path (dnf5 vs dnf)."""
+    import shutil
+
+    # Try dnf5 first if available
+    if shutil.which("dnf5"):
+        return "dnf5"
+
+    # Try dnf
+    if shutil.which("dnf"):
+        return "dnf"
+
+    # Default to dnf
+    return "dnf"
+
+
+def sudo_path() -> str:
+    """Get path to sudo."""
+    import shutil
+
+    return shutil.which("sudo") or "sudo"
+
+
+def _get_driver_lock_command(distro_id: str, branch: str) -> list[str]:
     """Get command to lock driver to branch."""
     if distro_id in ("ubuntu", "debian"):
-        return f"echo 'Pin: version {branch}.*' | sudo tee -a /etc/apt/preferences.d/nvidia"
+        return [
+            "bash",
+            "-c",
+            f"echo 'Pin: version {branch}.*' | sudo tee -a /etc/apt/preferences.d/nvidia",
+        ]
     elif distro_id == "fedora":
-        # Detect dnf4 vs dnf5 - only dnf4 uses --raw flag
-        dnf_version = _detect_dnf_version()
-        if dnf_version == "dnf5":
-            return f"sudo dnf versionlock add 'akmod-nvidia-{branch}.*'"
-        return f"sudo dnf versionlock add --raw 'akmod-nvidia-{branch}.*'"
+        dnf_path = _detect_dnf_path()
+        pattern = f"akmod-nvidia-{branch}.*"
+        return [sudo_path(), dnf_path, "versionlock", "add", pattern]
     elif distro_id == "arch":
-        return f"sudo pacman -D --lock nvidia-{branch}xx"
+        return [sudo_path(), "pacman", "-D", "--lock", f"nvidia-{branch}xx"]
     elif distro_id == "opensuse":
-        return "sudo zypper addlock x11-video-nvidiaG05"
-    return f"# Lock to branch {branch}"
+        return [sudo_path(), "zypper", "addlock", "x11-video-nvidiaG05"]
+    return ["bash", "-c", f"# Lock to branch {branch}"]
 
 
-def _get_cuda_lock_command(distro_id: str, major: str) -> str:
+def _get_driver_unlock_command(distro_id: str, branch: str) -> list[str] | None:
+    """Get command to unlock driver from branch."""
+    if distro_id == "fedora":
+        dnf_path = _detect_dnf_path()
+        pattern = f"akmod-nvidia-{branch}.*"
+        return [sudo_path(), dnf_path, "versionlock", "delete", pattern]
+    return None
+
+
+def _get_cuda_lock_command(distro_id: str, major: str) -> list[str]:
     """Get command to lock CUDA to major version.
 
     Uses hyphen pattern for Fedora (cuda-toolkit-{major}-*) because
     packages are named cuda-toolkit-13-2, not cuda-toolkit-13.2
     """
     if distro_id in ("ubuntu", "debian"):
-        return (
-            f"echo 'Pin: version {major}.*' | sudo tee -a /etc/apt/preferences.d/cuda"
-        )
+        return [
+            "bash",
+            "-c",
+            f"echo 'Pin: version {major}.*' | sudo tee -a /etc/apt/preferences.d/cuda",
+        ]
     elif distro_id == "fedora":
-        # Use hyphen pattern: cuda-toolkit-{major}-*
-        # Packages are named cuda-toolkit-13-2 (hyphen) not cuda-toolkit-13.2 (dot)
-        dnf_version = _detect_dnf_version()
-        if dnf_version == "dnf5":
-            return f"sudo dnf versionlock add 'cuda-toolkit-{major}-*'"
-        return f"sudo dnf versionlock add --raw 'cuda-toolkit-{major}-*'"
+        dnf_path = _detect_dnf_path()
+        pattern = f"cuda-toolkit-{major}-*"
+        return [sudo_path(), dnf_path, "versionlock", "add", pattern]
     elif distro_id == "arch":
-        return f"sudo pacman -D --lock cuda-{major}*"
+        return [sudo_path(), "pacman", "-D", "--lock", f"cuda-{major}*"]
     elif distro_id == "opensuse":
-        return f"sudo zypper addlock 'cuda-toolkit-{major}-*'"
-    return f"# Lock CUDA to {major}.*"
+        return [sudo_path(), "zypper", "addlock", f"cuda-toolkit-{major}-*"]
+    return ["bash", "-c", f"# Lock CUDA to {major}.*"]
+
+
+def _get_cuda_unlock_command(distro_id: str, major: str) -> list[str] | None:
+    """Get command to unlock CUDA from major version."""
+    if distro_id == "fedora":
+        dnf_path = _detect_dnf_path()
+        pattern = f"cuda-toolkit-{major}-*"
+        return [sudo_path(), dnf_path, "versionlock", "delete", pattern]
+    return None
+
+
+def _verify_versionlock_pattern(
+    distro_id: str, package_pattern: str, lock_type: str
+) -> tuple[bool, str]:
+    """Verify that a versionlock entry matches the expected pattern.
+
+    Args:
+        distro_id: Distribution ID
+        package_pattern: Expected package pattern (e.g., 'akmod-nvidia-580.*')
+        lock_type: Type of lock ('driver' or 'cuda')
+
+    Returns:
+        Tuple of (success, status_message)
+    """
+    import re
+    import subprocess
+
+    if distro_id not in ("fedora", "rhel", "centos"):
+        return True, "Verification skipped (not Fedora)"
+
+    try:
+        dnf_path = _detect_dnf_path()
+        result = subprocess.run(
+            [dnf_path, "versionlock", "list"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        if result.returncode != 0:
+            return False, f"Failed to list versionlocks: {result.stderr}"
+
+        output = result.stdout
+
+        # Extract package name from pattern (e.g., 'akmod-nvidia-580.*' -> 'akmod-nvidia')
+        base_pattern = package_pattern.rsplit("-", 1)[0]
+        # Handle patterns like 'cuda-toolkit-12-*'
+        if lock_type == "cuda" and "cuda-toolkit" in package_pattern:
+            # Extract major version from pattern (e.g., "12" from "cuda-toolkit-12-*")
+            major = package_pattern.split("-")[2].replace("*", "")
+
+            # Look for any cuda-toolkit entry with matching major version
+            lines = output.split("\n")
+            for line in lines:
+                if "cuda-toolkit" in line and major in line:
+                    # Extract evr
+                    match = re.search(r"evr\s*=\s*(.+?)(?:\s|$)", line)
+                    if match:
+                        evr = match.group(1).strip()
+                        # Verify the version contains our major version
+                        if major in evr:
+                            return (
+                                True,
+                                f"Versionlock verified: cuda-toolkit-{major}.* (locked to {evr})",
+                            )
+
+            # Check if any cuda-toolkit exists at all (no specific version check)
+            if "cuda-toolkit" in output:
+                return (
+                    True,
+                    "Versionlock verified: cuda-toolkit (version check skipped)",
+                )
+
+            return False, f"No versionlock found for cuda-toolkit-{major}.*"
+
+        # Check if we found our lock entry
+        if base_pattern in output:
+            # Check if it's a pattern lock (has *) or specific version
+            lines = output.split("\n")
+            for line in lines:
+                if base_pattern in line:
+                    # Extract evr part
+                    match = re.search(r"evr\s*=\s*(.+?)(?:\s|$)", line)
+                    if match:
+                        evr = match.group(1).strip()
+                        # If evr contains *, it's a pattern lock
+                        if "*" in evr:
+                            return True, f"Versionlock verified (pattern): {evr}"
+                        # If evr matches our pattern (e.g., 580.126.18 matches 580.*)
+                        else:
+                            # Check if version matches branch
+                            pkg_branch = package_pattern.split("-")[1].replace(".*", "")
+                            if pkg_branch in evr.split(".")[0]:
+                                return (
+                                    True,
+                                    f"Versionlock verified (branch match): {evr}",
+                                )
+                            else:
+                                return (
+                                    False,
+                                    f"Lock exists but wrong version: {evr} (expected branch {pkg_branch}.x)",
+                                )
+
+            # Found package but couldn't determine evr
+            return True, "Versionlock exists"
+
+        return False, f"No versionlock found for {base_pattern}"
+
+    except subprocess.TimeoutExpired:
+        return False, "Verification timed out"
+    except Exception as e:
+        return False, f"Verification error: {e}"
+
+
+def _cleanup_incorrect_versionlocks(
+    distro_id: str, package_base: str, expected_branch: str
+) -> bool:
+    """Clean up incorrect versionlock entries for a package.
+
+    Removes any locks that don't match the expected branch pattern.
+
+    Args:
+        distro_id: Distribution ID
+        package_base: Base package name (e.g., 'akmod-nvidia')
+        expected_branch: Expected branch (e.g., '580')
+
+    Returns:
+        True if cleanup successful or no cleanup needed, False on error
+    """
+    import re
+    import subprocess
+
+    if distro_id not in ("fedora", "rhel", "centos"):
+        return True
+
+    try:
+        dnf_path = _detect_dnf_path()
+
+        # Get current locks
+        result = subprocess.run(
+            [dnf_path, "versionlock", "list"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        if result.returncode != 0:
+            logger.warning(f"Failed to list versionlocks: {result.stderr}")
+            return True  # Continue anyway
+
+        output = result.stdout
+
+        # Find entries for our package
+        lines = output.split("\n")
+        for line in lines:
+            if package_base in line:
+                # Extract evr
+                match = re.search(r"evr\s*=\s*(.+?)(?:\s|$)", line)
+                if match:
+                    evr = match.group(1).strip()
+                    # Check if this is a specific version lock (not a pattern)
+                    if "*" not in evr:
+                        # Extract version from evr (e.g., "3:580.126.18-1.fc43" -> "580")
+                        version_match = re.match(r"\d+:(\d+)\.", evr)
+                        if version_match:
+                            lock_branch = version_match.group(1)
+                            # If branch doesn't match expected, remove it
+                            if lock_branch != expected_branch:
+                                logger.info(
+                                    f"Removing incorrect versionlock: {package_base} ({evr})"
+                                )
+                                delete_result = subprocess.run(
+                                    [
+                                        sudo_path(),
+                                        dnf_path,
+                                        "versionlock",
+                                        "delete",
+                                        package_base,
+                                    ],
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=30,
+                                )
+                                if delete_result.returncode != 0:
+                                    logger.warning(
+                                        f"Failed to remove lock: {delete_result.stderr}"
+                                    )
+                                else:
+                                    print(f"           Removed incorrect lock: {evr}")
+
+        return True
+
+    except Exception as e:
+        logger.warning(f"Cleanup error: {e}")
+        return True  # Continue anyway
 
 
 def _get_install_command(distro_id: str, packages: list[str]) -> str:
