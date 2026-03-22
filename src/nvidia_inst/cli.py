@@ -291,27 +291,33 @@ def print_compatibility_info(
         gpu_info += f" ({', '.join(details)})"
     print(f"GPU: {gpu_info}")
 
-    # Driver and CUDA line
+    # Driver line
     driver_info = ""
     if driver_range.max_version:
         driver_info = f"{driver_range.min_version} - {driver_range.max_version}"
     else:
         driver_info = f"{driver_range.min_version} or later"
+    print(f"Driver: {driver_info}")
 
-    cuda_info = ""
-    if driver_range.cuda_min:
-        if driver_range.cuda_max:
-            cuda_info = f"CUDA {driver_range.cuda_min} - {driver_range.cuda_max}"
+    # CUDA line with lock info
+    if driver_range.cuda_is_locked:
+        if driver_range.cuda_locked_major:
+            print(f"CUDA: {driver_range.cuda_locked_major}.x (locked to major version)")
         else:
-            cuda_info = f"CUDA {driver_range.cuda_min} or later"
-
-    if cuda_info:
-        print(f"Driver: {driver_info} ({cuda_info})")
-    else:
-        print(f"Driver: {driver_info}")
+            print(f"CUDA: {driver_range.cuda_max or driver_range.cuda_min} (locked)")
+    elif driver_range.cuda_min:
+        if driver_range.cuda_max:
+            print(f"CUDA: {driver_range.cuda_min} - {driver_range.cuda_max}")
+        else:
+            print(f"CUDA: {driver_range.cuda_min} or later")
 
     # Status line
-    status = "Compatible" if not driver_range.is_eol else "Limited (EOL GPU)"
+    if driver_range.is_eol:
+        status = "EOL (security updates only)"
+    elif driver_range.is_limited:
+        status = "Limited support"
+    else:
+        status = "Full support"
     print(f"Status: {status}")
 
 

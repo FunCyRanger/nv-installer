@@ -14,16 +14,16 @@ See AGENTS.md for core guidelines and PATTERNS.md for code examples.
 - Linux Driver Archive: https://www.nvidia.com/en-us/drivers/unix/
 
 ### GPU Compute Capability Mapping
-| GPU Generation | Examples | Compute Capability | Max Driver | Support Status |
-|----------------|----------|---------------------|------------|----------------|
-| Kepler | GTX 6xx, 7xx, K系列 | 3.0-3.7 | 470.x | EOL (security only) |
-| Maxwell | GTX 9xx, M系列, Quadro M | 5.0-5.2 | 580.x | Limited (580 branch) |
-| Pascal | GTX 10xx, P100 | 6.0-6.1 | 580.x | Limited (580 branch) |
-| Volta | V100, Titan V | 7.0 | 580.x | Limited (580 branch) |
-| Turing | RTX 20xx, GTX 16xx, T4 | 7.5 | 590.x | Full (latest drivers) |
-| Ampere | RTX 30xx, A100, A30 | 8.0-8.6 | 590.x | Full (latest drivers) |
-| Ada Lovelace | RTX 40xx, L40, L10 | 8.9 | 590.x | Full (latest drivers) |
-| Blackwell | RTX 50xx | 9.0 | 590.x | Full (latest drivers) |
+| GPU Generation | Examples | Compute Capability | Driver Lock | CUDA Lock | Support Status |
+|----------------|----------|---------------------|-------------|-----------|----------------|
+| Kepler | GTX 6xx, 7xx, K-series | 3.0-3.7 | 470.256.02 | 11.* | EOL (security only) |
+| Maxwell | GTX 9xx, M-series, Quadro M | 5.0-5.2 | 580.* | 12.* | Limited (Oct 2028) |
+| Pascal | GTX 10xx, P100 | 6.0-6.1 | 580.* | 12.* | Limited (Oct 2028) |
+| Volta | V100, Titan V | 7.0 | 580.* | 12.* | Limited (Oct 2028) |
+| Turing | RTX 20xx, GTX 16xx, T4 | 7.5 | No lock | No lock | Full (latest) |
+| Ampere | RTX 30xx, A100, A30 | 8.0-8.6 | No lock | No lock | Full (latest) |
+| Ada Lovelace | RTX 40xx, L40, L10 | 8.9 | No lock | No lock | Full (latest) |
+| Blackwell | RTX 50xx | 9.0 | No lock | No lock | Full (latest) |
 
 ### Latest Driver Versions (March 2026)
 - **Production Branch (580.x)**: 580.142 - Recommended for Maxwell/Pascal/Volta
@@ -64,6 +64,70 @@ def get_driver_branch(generation: str) -> str:
 - Lock package manager to max version (e.g., apt pin, dnf versionlock)
 - Show clear warning to user about limited support
 - Offer to install compatible driver version
+
+### CUDA Version Compatibility Matrix
+Based on official NVIDIA CUDA Toolkit and Architecture Matrix:
+
+| GPU Generation | CUDA Range | CUDA Lock | Lock Type | Last CUDA Support |
+|----------------|------------|-----------|-----------|-------------------|
+| Kepler | 7.5 - 11.8 | `11.*` | Major (EOL) | CUDA 11.x |
+| Maxwell | 7.5 - 12.8 | `12.*` | Major (Limited) | CUDA 12.x |
+| Pascal | 8.0 - 12.8 | `12.*` | Major (Limited) | CUDA 12.x |
+| Volta | 9.0 - 12.8 | `12.*` | Major (Limited) | CUDA 12.x |
+| Turing | 10.0 - 12.8 | None | N/A | Ongoing |
+| Ampere | 11.0 - 12.8 | None | N/A | Ongoing |
+| Ada Lovelace | 11.8 - 12.8 | None | N/A | Ongoing |
+| Blackwell | 12.4 - 13.x | None | N/A | Ongoing |
+
+**Notes:**
+- Maxwell, Pascal, Volta: CUDA support frozen at 12.x (feature-complete as of CUDA 12.9)
+- CUDA 13.0+ drops support for Maxwell, Pascal, and Volta
+- Kepler: End-of-life, locked to CUDA 11.x branch
+- Modern GPUs (Turing+): Full CUDA support, no version lock
+
+### CUDA Version Locking Implementation
+```python
+# CUDARange dataclass includes locking fields
+@dataclass(frozen=True)
+class CUDARange:
+    min_version: str
+    max_version: str | None = None
+    recommended: str = "12.2"
+    locked_major: str | None = None  # Lock to major (e.g., "12")
+    is_locked: bool = False          # Whether CUDA is locked
+
+# DriverRange includes CUDA lock info
+@dataclass
+class DriverRange:
+    # ... driver fields ...
+    cuda_locked_major: str | None = None  # e.g., "12" for 12.*
+    cuda_is_locked: bool = False          # True for EOL/Limited GPUs
+
+# Validation respects locks
+def validate_cuda_version_with_lock(cuda_version: str, gpu: GPUInfo) -> tuple[bool, str]:
+    driver_range = get_driver_range(gpu)
+    if driver_range.cuda_is_locked:
+        cuda_major = cuda_version.split(".")[0]
+        if cuda_major != driver_range.cuda_locked_major:
+            return False, f"CUDA locked to {driver_range.cuda_locked_major}.x"
+    return validate_cuda_version(cuda_version, gpu)
+```
+
+### CUDA Version Pinning by Distro
+```python
+# APT: Pattern-based pinning
+Pin: version 12.*
+Pin-Priority: 1001
+
+# DNF: Versionlock with wildcard
+dnf versionlock add --raw 'cuda-toolkit-12.*'
+
+# Zypper: Version lock
+zypper addlock 'cuda-toolkit >= 12.0, < 13.0'
+
+# Pacman: Manual lock
+pacman -D --lock cuda
+```
 
 ---
 

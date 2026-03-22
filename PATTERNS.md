@@ -267,3 +267,87 @@ except DriverInstallError as e:
     logger.error(f"Driver installation failed: {e}")
     save_log_and_exit()
 ```
+
+---
+
+## CUDA Version Locking
+
+### Locking Strategy by GPU Status
+
+| GPU Status | Driver Lock | CUDA Lock | Reason |
+|------------|-------------|-----------|--------|
+| EOL (Kepler) | `470.256.02` (exact) | `11.*` (major) | No more CUDA updates |
+| Limited (Maxwell/Pascal/Volta) | `580.*` (branch) | `12.*` (major) | Frozen at CUDA 12.x |
+| Full (Turing+) | None | None | Latest CUDA supported |
+
+### Validating CUDA Version with Lock
+```python
+def validate_cuda_version_with_lock(cuda_version: str, gpu: GPUInfo) -> tuple[bool, str]:
+    """Validate CUDA version respecting locked major version."""
+    driver_range = get_driver_range(gpu)
+
+    if not driver_range.cuda_is_locked:
+        return validate_cuda_version(cuda_version, gpu)
+
+    # Check major version matches lock
+    cuda_major = cuda_version.split(".")[0]
+    if cuda_major != driver_range.cuda_locked_major:
+        return (
+            False,
+            f"CUDA for {gpu.generation} GPUs is locked to {driver_range.cuda_locked_major}.x",
+        )
+
+    return validate_cuda_version(cuda_version, gpu)
+```
+
+### Pinning CUDA by Major Version
+```python
+def pin_cuda_to_major_version(
+    distro_id: str,
+    major_version: str,
+    pkg_manager: PackageManager,
+) -> bool:
+    """Pin CUDA packages to a major version (e.g., '12' → 12.*)"""
+    pattern = f"{major_version}.*"
+    packages = _get_cuda_packages_for_pinning(distro_id, major_version)
+
+    for pkg in packages:
+        if not pkg_manager.pin_version(pkg, pattern):
+            logger.warning(f"Failed to pin {pkg} to {pattern}")
+            return False
+        logger.info(f"Pinned {pkg} to {pattern}")
+
+    return True
+```
+
+### Auto-Selecting CUDA Version Based on Lock
+```python
+# In install_driver() - auto-select CUDA if locked
+if with_cuda and cuda_version is None and driver_range and driver_range.cuda_is_locked:
+    if driver_range.cuda_locked_major:
+        # Limited: use locked major (e.g., "12.0")
+        cuda_version = f"{driver_range.cuda_locked_major}.0"
+        logger.info(f"Auto-selected CUDA {cuda_version} (locked to {driver_range.cuda_locked_major}.x)")
+    elif driver_range.cuda_max:
+        # EOL: use max version
+        cuda_version = driver_range.cuda_max
+        logger.info(f"Auto-selected CUDA {cuda_version} (locked for EOL GPU)")
+```
+
+### CLI Display with Lock Info
+```python
+def print_compatibility_info(distro, gpu, driver_range):
+    # ... existing code ...
+
+    # CUDA line with lock info
+    if driver_range.cuda_is_locked:
+        if driver_range.cuda_locked_major:
+            print(f"CUDA: {driver_range.cuda_locked_major}.x (locked to major version)")
+        else:
+            print(f"CUDA: {driver_range.cuda_max or driver_range.cuda_min} (locked)")
+    elif driver_range.cuda_min:
+        if driver_range.cuda_max:
+            print(f"CUDA: {driver_range.cuda_min} - {driver_range.cuda_max}")
+        else:
+            print(f"CUDA: {driver_range.cuda_min} or later")
+```

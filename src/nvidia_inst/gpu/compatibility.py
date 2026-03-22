@@ -68,6 +68,8 @@ class DriverRange:
     is_limited: bool = False
     max_branch: str | None = None
     eol_message: str | None = None
+    cuda_locked_major: str | None = None  # Lock CUDA to major version (e.g., "12")
+    cuda_is_locked: bool = False  # Whether CUDA version is locked
 
 
 def get_driver_range(gpu: GPUInfo) -> DriverRange:
@@ -101,6 +103,8 @@ def get_driver_range(gpu: GPUInfo) -> DriverRange:
                 is_limited=gen_info.is_limited,
                 max_branch=gen_info.branches[0] if gen_info.branches else None,
                 eol_message=gen_info.eol_message,
+                cuda_locked_major=gen_info.cuda.locked_major,
+                cuda_is_locked=gen_info.cuda.is_locked,
             )
     except Exception as e:
         logger.debug(f"Failed to get driver range from matrix: {e}")
@@ -161,6 +165,80 @@ def validate_cuda_version(cuda_version: str, gpu: GPUInfo) -> tuple[bool, str]:
     return (True, f"CUDA {cuda_version} is compatible with {gpu.generation}")
 
 
+def validate_cuda_version_with_lock(
+    cuda_version: str, gpu: GPUInfo
+) -> tuple[bool, str]:
+    """Validate CUDA version respecting locked major version.
+
+    For locked GPUs:
+    - Limited (locked_major="12"): Must be 12.x
+    - EOL (locked_major="11"): Must be 11.x
+
+    Args:
+        cuda_version: CUDA version to validate (e.g., "12.2")
+        gpu: GPU information
+
+    Returns:
+        Tuple of (is_valid, message)
+    """
+    driver_range = get_driver_range(gpu)
+
+    if not driver_range.cuda_is_locked:
+        return validate_cuda_version(cuda_version, gpu)
+
+    if driver_range.cuda_locked_major is None:
+        # Should not happen, fall back to range validation
+        return validate_cuda_version(cuda_version, gpu)
+
+    # Limited/EOL: major version lock
+    cuda_major = cuda_version.split(".")[0]
+    if cuda_major != driver_range.cuda_locked_major:
+        return (
+            False,
+            f"CUDA for {gpu.generation} GPUs is locked to major version {driver_range.cuda_locked_major}.x. "
+            f"Requested: {cuda_version}",
+        )
+
+    # Also check it's within the valid range
+    return validate_cuda_version(cuda_version, gpu)
+
+
+def get_recommended_cuda_version(gpu: GPUInfo) -> str:
+    """Get recommended CUDA version for GPU.
+
+    For locked GPUs, returns the locked major + .0 (e.g., "12.0").
+    For unlocked GPUs, returns the recommended version from matrix.
+
+    Args:
+        gpu: GPU information
+
+    Returns:
+        Recommended CUDA version string
+    """
+    driver_range = get_driver_range(gpu)
+
+    if driver_range.cuda_is_locked and driver_range.cuda_locked_major:
+        return f"{driver_range.cuda_locked_major}.0"
+
+    # Fall back to minimum version if no recommended
+    return driver_range.cuda_min
+
+
+def get_cuda_major_version_lock(gpu: GPUInfo) -> str | None:
+    """Get the CUDA major version lock for a GPU, if any.
+
+    Args:
+        gpu: GPU information
+
+    Returns:
+        Major version string (e.g., "12") or None if not locked
+    """
+    driver_range = get_driver_range(gpu)
+    if driver_range.cuda_is_locked:
+        return driver_range.cuda_locked_major
+    return None
+
+
 def validate_driver_version(driver_version: str, gpu: GPUInfo) -> tuple[bool, str]:
     """Validate driver version compatibility with GPU generation.
 
@@ -215,7 +293,9 @@ def _get_driver_range_fallback(generation: str) -> DriverRange:
             is_limited=True,
             max_branch="470",
             eol_message=f"GPU generation '{generation}' is end-of-life. "
-            f"Maximum supported driver: {max_version}",
+            f"Maximum supported driver: {max_version}. CUDA locked to 11.x.",
+            cuda_locked_major="11",
+            cuda_is_locked=True,
         )
 
     if generation in ("maxwell", "pascal", "volta"):
@@ -234,8 +314,10 @@ def _get_driver_range_fallback(generation: str) -> DriverRange:
             is_limited=True,
             max_branch=branch,
             eol_message=f"GPU generation '{generation}' uses driver branch {branch}. "
-            f"Supports {branch}.xx drivers up to {max_major_minor}. "
+            f"CUDA support frozen at 12.x. "
             f"Will receive branch updates through October 2028.",
+            cuda_locked_major="12",
+            cuda_is_locked=True,
         )
 
     cuda_range = _get_cuda_range(generation)
@@ -250,13 +332,21 @@ def _get_driver_range_fallback(generation: str) -> DriverRange:
         is_eol=False,
         is_limited=False,
         max_branch=branch,
+        cuda_locked_major=None,
+        cuda_is_locked=False,
     )
 
 
 def _get_cuda_range(generation: str) -> tuple[str, str | None]:
-    """Get CUDA version range for a GPU generation."""
+    """Get CUDA version range for a GPU generation.
+
+    Based on official NVIDIA CUDA Toolkit and Architecture Matrix:
+    - Kepler: CUDA 7.5 - 11.x (EOL, last CUDA 11.8)
+    - Maxwell/Pascal/Volta: CUDA 7.5-8.0 - 12.x (Limited, frozen at 12.x)
+    - Turing+: Latest CUDA supported
+    """
     cuda_versions = {
-        "kepler": ("7.5", "9.0"),
+        "kepler": ("7.5", "11.8"),
         "maxwell": ("7.5", "12.8"),
         "pascal": ("8.0", "12.8"),
         "volta": ("9.0", "12.8"),

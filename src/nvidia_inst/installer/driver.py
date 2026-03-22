@@ -3,9 +3,13 @@
 import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from nvidia_inst.gpu.compatibility import DriverRange
 from nvidia_inst.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from nvidia_inst.gpu.detector import GPUInfo
 
 logger = get_logger(__name__)
 
@@ -538,6 +542,8 @@ def install_driver(
     with_cuda: bool = True,
     cuda_version: str | None = None,
     pkg_manager=None,
+    driver_range: DriverRange | None = None,
+    gpu_info: "GPUInfo | None" = None,
 ) -> InstallResult:
     """Install Nvidia driver.
 
@@ -547,15 +553,51 @@ def install_driver(
         with_cuda: Install CUDA packages.
         cuda_version: Specific CUDA version (optional).
         pkg_manager: Package manager for version pinning.
+        driver_range: Compatible driver version range for GPU.
+        gpu_info: GPU information for CUDA compatibility check.
 
     Returns:
         InstallResult with success status and message.
     """
+    from nvidia_inst.gpu.compatibility import validate_cuda_version_with_lock
+    from nvidia_inst.installer.cuda import (
+        pin_cuda_to_exact_version,
+        pin_cuda_to_major_version,
+    )
+
     if not installer.pre_install_check():
         return InstallResult(
             success=False,
             message="Pre-installation check failed",
         )
+
+    # Auto-select CUDA version based on lock if not specified
+    if (
+        with_cuda
+        and cuda_version is None
+        and driver_range
+        and driver_range.cuda_is_locked
+    ):
+        if driver_range.cuda_locked_major:
+            # Limited: use locked major version (e.g., "12.0")
+            cuda_version = f"{driver_range.cuda_locked_major}.0"
+            logger.info(
+                f"Auto-selected CUDA {cuda_version} (locked to {driver_range.cuda_locked_major}.x for {gpu_info.generation if gpu_info else 'GPU'})"
+            )
+        elif driver_range.cuda_max:
+            # EOL: use max version
+            cuda_version = driver_range.cuda_max
+            logger.info(f"Auto-selected CUDA {cuda_version} (locked for EOL GPU)")
+
+    # Validate CUDA with lock if GPU info available
+    if with_cuda and cuda_version and gpu_info:
+        valid, message = validate_cuda_version_with_lock(cuda_version, gpu_info)
+        if not valid:
+            logger.error(f"CUDA validation failed: {message}")
+            return InstallResult(
+                success=False,
+                message=message,
+            )
 
     driver_pkgs = installer.get_driver_packages(driver_version)
 
@@ -581,6 +623,22 @@ def install_driver(
             try:
                 logger.info(f"Installing CUDA packages: {cuda_pkgs}")
                 installer.install(cuda_pkgs)
+
+                # Pin CUDA version if locked
+                if driver_range and driver_range.cuda_is_locked and pkg_manager:
+                    if driver_range.cuda_locked_major:
+                        pin_cuda_to_major_version(
+                            _get_distro_id_from_installer(installer),
+                            driver_range.cuda_locked_major,
+                            pkg_manager,
+                        )
+                    elif cuda_version:
+                        pin_cuda_to_exact_version(
+                            _get_distro_id_from_installer(installer),
+                            cuda_version,
+                            pkg_manager,
+                        )
+
             except Exception as e:
                 logger.warning(f"CUDA installation failed: {e}")
 
@@ -591,6 +649,20 @@ def install_driver(
         message="Driver installed successfully. Reboot required.",
         packages_installed=driver_pkgs,
     )
+
+
+def _get_distro_id_from_installer(installer: DistroInstaller) -> str:
+    """Get distribution ID from installer class name."""
+    class_name = installer.__class__.__name__.lower()
+    if "ubuntu" in class_name or "debian" in class_name:
+        return "ubuntu"
+    elif "fedora" in class_name or "rhel" in class_name:
+        return "fedora"
+    elif "arch" in class_name:
+        return "arch"
+    elif "suse" in class_name:
+        return "opensuse"
+    return "ubuntu"  # Default
 
 
 def get_compatible_driver_packages(

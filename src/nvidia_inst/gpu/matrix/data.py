@@ -20,6 +20,8 @@ class CUDARange:
     min_version: str
     max_version: str | None = None
     recommended: str = "12.2"
+    locked_major: str | None = None  # Lock to major version (e.g., "12" for 12.*)
+    is_locked: bool = False  # Whether CUDA version is locked
 
 
 @dataclass(frozen=True)
@@ -107,7 +109,13 @@ GPU_GENERATIONS: dict[str, GPUGenerationInfo] = {
         name="blackwell",
         display_name="GeForce RTX 50 Series",
         compute_cap=ComputeCapability(min=9.0, max=12.1),
-        cuda=CUDARange(min_version="12.4", max_version="13.x", recommended="12.6"),
+        cuda=CUDARange(
+            min_version="12.4",
+            max_version="13.x",
+            recommended="12.6",
+            locked_major=None,
+            is_locked=False,
+        ),
         branches=["590", "595"],
         status=SupportStatus.FULL,
         min_driver="550.127.05",
@@ -117,7 +125,13 @@ GPU_GENERATIONS: dict[str, GPUGenerationInfo] = {
         name="ada",
         display_name="GeForce RTX 40 Series, L40, L10",
         compute_cap=ComputeCapability(min=8.9, max=8.9),
-        cuda=CUDARange(min_version="11.8", max_version="12.8", recommended="12.2"),
+        cuda=CUDARange(
+            min_version="11.8",
+            max_version="12.8",
+            recommended="12.2",
+            locked_major=None,
+            is_locked=False,
+        ),
         branches=["590"],
         status=SupportStatus.FULL,
         min_driver="525.60.13",
@@ -127,7 +141,13 @@ GPU_GENERATIONS: dict[str, GPUGenerationInfo] = {
         name="ampere",
         display_name="GeForce RTX 30 Series, A100, A30, A40",
         compute_cap=ComputeCapability(min=8.0, max=8.6),
-        cuda=CUDARange(min_version="11.0", max_version="12.8", recommended="12.2"),
+        cuda=CUDARange(
+            min_version="11.0",
+            max_version="12.8",
+            recommended="12.2",
+            locked_major=None,
+            is_locked=False,
+        ),
         branches=["590"],
         status=SupportStatus.FULL,
         min_driver="520.56.06",
@@ -137,7 +157,13 @@ GPU_GENERATIONS: dict[str, GPUGenerationInfo] = {
         name="turing",
         display_name="GeForce RTX 20 Series, GTX 16 Series, T4, Quadro RTX",
         compute_cap=ComputeCapability(min=7.5, max=7.5),
-        cuda=CUDARange(min_version="10.0", max_version="12.8", recommended="12.2"),
+        cuda=CUDARange(
+            min_version="10.0",
+            max_version="12.8",
+            recommended="12.2",
+            locked_major=None,
+            is_locked=False,
+        ),
         branches=["590"],
         status=SupportStatus.FULL,
         min_driver="520.56.06",
@@ -147,45 +173,69 @@ GPU_GENERATIONS: dict[str, GPUGenerationInfo] = {
         name="volta",
         display_name="Tesla V100, Titan V",
         compute_cap=ComputeCapability(min=7.0, max=7.0),
-        cuda=CUDARange(min_version="9.0", max_version="12.8", recommended="11.8"),
+        cuda=CUDARange(
+            min_version="9.0",
+            max_version="12.8",
+            recommended="12.2",
+            locked_major="12",  # CUDA frozen at 12.x
+            is_locked=True,
+        ),
         branches=["580"],
         status=SupportStatus.LIMITED,
         min_driver="515.65.01",
         max_driver="580.142",
-        eol_message="Volta uses driver branch 580.x. Will receive branch updates through October 2028.",
+        eol_message="Volta uses driver branch 580.x. CUDA support frozen at 12.x. Will receive branch updates through October 2028.",
     ),
     "pascal": GPUGenerationInfo(
         name="pascal",
         display_name="GeForce GTX 10 Series, P100, Quadro P-series",
         compute_cap=ComputeCapability(min=6.0, max=6.1),
-        cuda=CUDARange(min_version="8.0", max_version="12.8", recommended="11.8"),
+        cuda=CUDARange(
+            min_version="8.0",
+            max_version="12.8",
+            recommended="12.2",
+            locked_major="12",  # CUDA frozen at 12.x
+            is_locked=True,
+        ),
         branches=["580"],
         status=SupportStatus.LIMITED,
         min_driver="450.191.0",
         max_driver="580.142",
-        eol_message="Pascal uses driver branch 580.x. Will receive branch updates through October 2028.",
+        eol_message="Pascal uses driver branch 580.x. CUDA support frozen at 12.x. Will receive branch updates through October 2028.",
     ),
     "maxwell": GPUGenerationInfo(
         name="maxwell",
         display_name="GeForce GTX 900 Series, GTX 750 Series, M-series, Quadro M",
         compute_cap=ComputeCapability(min=5.0, max=5.2),
-        cuda=CUDARange(min_version="7.5", max_version="12.8", recommended="11.8"),
+        cuda=CUDARange(
+            min_version="7.5",
+            max_version="12.8",
+            recommended="12.2",
+            locked_major="12",  # CUDA frozen at 12.x
+            is_locked=True,
+        ),
         branches=["580"],
         status=SupportStatus.LIMITED,
         min_driver="450.191.0",
         max_driver="580.142",
-        eol_message="Maxwell uses driver branch 580.x. Will receive branch updates through October 2028.",
+        eol_message="Maxwell uses driver branch 580.x. CUDA support frozen at 12.x. Will receive branch updates through October 2028.",
     ),
     "kepler": GPUGenerationInfo(
         name="kepler",
         display_name="GeForce GTX 600/700 Series, K-series",
         compute_cap=ComputeCapability(min=3.0, max=3.7),
-        cuda=CUDARange(min_version="7.5", max_version="9.0", recommended="9.0"),
+        cuda=CUDARange(
+            min_version="7.5",
+            max_version="11.8",
+            recommended="11.8",
+            locked_major="11",  # EOL - CUDA locked to 11.x
+            is_locked=True,
+        ),
         branches=["470"],
         status=SupportStatus.EOL,
         min_driver="390.157.0",
         max_driver="470.256.02",
-        eol_message="Kepler is end-of-life. Maximum supported driver: 470.256.02 (security updates only).",
+        eol_message="Kepler is end-of-life. Maximum supported driver: 470.256.02. CUDA locked to 11.x.",
     ),
 }
 

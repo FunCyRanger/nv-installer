@@ -77,7 +77,9 @@ class MatrixManager:
     @property
     def is_fallback(self) -> bool:
         """Check if using fallback data."""
-        return self._matrix_data is not None and self._matrix_data.get("_meta", {}).get("is_fallback", False)
+        return self._matrix_data is not None and self._matrix_data.get("_meta", {}).get(
+            "is_fallback", False
+        )
 
     def get_last_update_time(self) -> str | None:
         """Get when matrix was last updated."""
@@ -238,7 +240,9 @@ class MatrixManager:
             for branch, new_version in branch_versions.items():
                 old_version = fallback.get("branches", {}).get(branch, {}).get("latest")
                 if old_version and new_version != old_version:
-                    logger.info(f"New version for branch {branch}: {old_version} -> {new_version}")
+                    logger.info(
+                        f"New version for branch {branch}: {old_version} -> {new_version}"
+                    )
                     updated = True
 
             if updated or self._force_update:
@@ -250,7 +254,9 @@ class MatrixManager:
                 fallback["_meta"]["is_fallback"] = False
 
                 content = json.dumps(fallback, sort_keys=True)
-                fallback["_meta"]["version"] = hashlib.sha1(content.encode()).hexdigest()[:8]
+                fallback["_meta"]["version"] = hashlib.sha1(
+                    content.encode()
+                ).hexdigest()[:8]
 
                 logger.info("Matrix updated with new driver versions")
                 return fallback
@@ -337,6 +343,8 @@ def _parse_generation_info(data: dict) -> GPUGenerationInfo | None:
                 min_version=cuda_data.get("min", "11.0"),
                 max_version=cuda_data.get("max"),
                 recommended=cuda_data.get("recommended", "12.2"),
+                locked_major=cuda_data.get("locked_major"),
+                is_locked=cuda_data.get("is_locked", False),
             ),
             branches=data.get("branches", []),
             status=status,
@@ -371,6 +379,7 @@ def _compare_versions(v1: str, v2: str) -> int:
     Returns:
         1 if v1 > v2, -1 if v1 < v2, 0 if equal.
     """
+
     def parse(v: str) -> tuple:
         parts = re.findall(r"\d+", v)
         return tuple(int(p) for p in parts[:3])

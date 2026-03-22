@@ -1,12 +1,13 @@
 {
   "_meta": {
-    "version": "2026.03.18",
-    "last_updated": "2026-03-18T00:00:00Z",
+    "version": "2026.03.22",
+    "last_updated": "2026-03-22T00:00:00Z",
     "generator": "nvidia-inst",
     "sources": [
       "https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/",
       "https://download.nvidia.com/XFree86/Linux-x86_64/",
-      "https://www.nvidia.com/en-us/drivers/unix/"
+      "https://www.nvidia.com/en-us/drivers/unix/",
+      "https://docs.nvidia.com/datacenter/tesla/drivers/cuda-toolkit-driver-and-architecture-matrix.html"
     ]
   },
   "branches": {
@@ -50,7 +51,9 @@
       "cuda": {
         "min": "12.4",
         "max": "13.x",
-        "recommended": "12.6"
+        "recommended": "12.6",
+        "locked_major": null,
+        "is_locked": false
       },
       "branches": ["590", "595"],
       "status": "full",
@@ -68,7 +71,9 @@
       "cuda": {
         "min": "11.8",
         "max": "12.8",
-        "recommended": "12.2"
+        "recommended": "12.2",
+        "locked_major": null,
+        "is_locked": false
       },
       "branches": ["590"],
       "status": "full",
@@ -86,7 +91,9 @@
       "cuda": {
         "min": "11.0",
         "max": "12.8",
-        "recommended": "12.2"
+        "recommended": "12.2",
+        "locked_major": null,
+        "is_locked": false
       },
       "branches": ["590"],
       "status": "full",
@@ -104,7 +111,9 @@
       "cuda": {
         "min": "10.0",
         "max": "12.8",
-        "recommended": "12.2"
+        "recommended": "12.2",
+        "locked_major": null,
+        "is_locked": false
       },
       "branches": ["590"],
       "status": "full",
@@ -122,13 +131,15 @@
       "cuda": {
         "min": "9.0",
         "max": "12.8",
-        "recommended": "11.8"
+        "recommended": "12.2",
+        "locked_major": "12",
+        "is_locked": true
       },
       "branches": ["580"],
       "status": "limited",
       "min_driver": "515.65.01",
       "max_driver": "580.142",
-      "eol_message": "Volta uses driver branch 580.x. Will receive branch updates through October 2028."
+      "eol_message": "Volta uses driver branch 580.x. CUDA support frozen at 12.x. Will receive branch updates through October 2028."
     },
     "pascal": {
       "name": "pascal",
@@ -140,13 +151,15 @@
       "cuda": {
         "min": "8.0",
         "max": "12.8",
-        "recommended": "11.8"
+        "recommended": "12.2",
+        "locked_major": "12",
+        "is_locked": true
       },
       "branches": ["580"],
       "status": "limited",
       "min_driver": "450.191.0",
       "max_driver": "580.142",
-      "eol_message": "Pascal uses driver branch 580.x. Will receive branch updates through October 2028."
+      "eol_message": "Pascal uses driver branch 580.x. CUDA support frozen at 12.x. Will receive branch updates through October 2028."
     },
     "maxwell": {
       "name": "maxwell",
@@ -158,13 +171,15 @@
       "cuda": {
         "min": "7.5",
         "max": "12.8",
-        "recommended": "11.8"
+        "recommended": "12.2",
+        "locked_major": "12",
+        "is_locked": true
       },
       "branches": ["580"],
       "status": "limited",
       "min_driver": "450.191.0",
       "max_driver": "580.142",
-      "eol_message": "Maxwell uses driver branch 580.x. Will receive branch updates through October 2028."
+      "eol_message": "Maxwell uses driver branch 580.x. CUDA support frozen at 12.x. Will receive branch updates through October 2028."
     },
     "kepler": {
       "name": "kepler",
@@ -175,14 +190,16 @@
       },
       "cuda": {
         "min": "7.5",
-        "max": "9.0",
-        "recommended": "9.0"
+        "max": "11.8",
+        "recommended": "11.8",
+        "locked_major": "11",
+        "is_locked": true
       },
       "branches": ["470"],
       "status": "eol",
       "min_driver": "390.157.0",
       "max_driver": "470.256.02",
-      "eol_message": "Kepler is end-of-life. Maximum supported driver: 470.256.02 (security updates only)."
+      "eol_message": "Kepler is end-of-life. Maximum supported driver: 470.256.02. CUDA locked to 11.x."
     }
   }
 }
