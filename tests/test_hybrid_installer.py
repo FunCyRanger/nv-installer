@@ -1,17 +1,14 @@
 """Tests for installer/hybrid.py module."""
 
-import pytest
-from unittest.mock import patch, MagicMock
-from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from nvidia_inst.installer.hybrid import (
-    get_hybrid_packages,
-    install_hybrid_packages,
     configure_prime_env,
+    get_hybrid_packages,
     get_power_profile,
-    set_power_profile,
+    install_hybrid_packages,
     is_prime_env_configured,
-    HYBRID_ENV_FILE,
+    set_power_profile,
 )
 
 

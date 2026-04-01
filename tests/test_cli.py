@@ -170,19 +170,10 @@ class TestCLIIntegration:
         monkeypatch,
     ):
         """Test install_driver_cli when no GPU detected."""
+        monkeypatch.setattr("sys.argv", ["nvidia-inst"])
         monkeypatch.setattr(
-            "nvidia_inst.cli.has_nvidia_gpu",
+            "nvidia_inst.cli.main.has_nvidia_gpu",
             lambda: False,
-        )
-        monkeypatch.setattr(
-            "nvidia_inst.distro.detector.detect_distro",
-            lambda: MagicMock(
-                id="ubuntu",
-                version_id="22.04",
-                name="Ubuntu",
-                pretty_name="Ubuntu 22.04.3 LTS",
-                kernel="5.15.0-91-generic",
-            ),
         )
         from nvidia_inst.cli import install_driver_cli
 
@@ -199,6 +190,7 @@ class TestCLIIntegration:
         mock_secure_boot_disabled,
     ):
         """Test install_driver_cli in dry-run mode."""
+        monkeypatch.setattr("sys.argv", ["nvidia-inst", "--dry-run"])
         monkeypatch.setattr("builtins.input", lambda _: "")
         monkeypatch.setattr(
             "nvidia_inst.installer.driver.get_compatible_driver_packages",
@@ -214,7 +206,7 @@ class TestCLIIntegration:
         )
         from nvidia_inst.cli import install_driver_cli
 
-        result = install_driver_cli(dry_run=True)
+        result = install_driver_cli()
         assert result == 0
 
 

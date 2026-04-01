@@ -1,16 +1,15 @@
 """Tests for cli/dryrun.py module."""
 
-import pytest
-from unittest.mock import patch, MagicMock
 from io import StringIO
+from unittest.mock import patch
 
 from nvidia_inst.cli.dryrun import (
-    get_initramfs_command,
-    dry_run_generic,
     dry_run_change,
-    dry_run_nvidia_open_install,
+    dry_run_generic,
     dry_run_nouveau_install,
+    dry_run_nvidia_open_install,
     dry_run_revert,
+    get_initramfs_command,
 )
 from nvidia_inst.distro.tools import PackageContext
 

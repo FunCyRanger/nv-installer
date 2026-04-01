@@ -1,11 +1,10 @@
 """Tests for installer/version_checker.py module."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from nvidia_inst.installer.version_checker import (
-    VersionCheckResult,
     VersionChecker,
+    VersionCheckResult,
 )
 
 

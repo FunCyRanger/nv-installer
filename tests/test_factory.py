@@ -1,17 +1,18 @@
 """Tests for distro/factory.py module."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-from nvidia_inst.distro.factory import (
-    get_package_manager,
-    get_manager_for_tool,
-    is_tool_supported,
-    get_supported_tools,
-    _get_manager_for_family,
-)
+import pytest
+
 from nvidia_inst.distro.apt import AptManager
 from nvidia_inst.distro.dnf import DnfManager
+from nvidia_inst.distro.factory import (
+    _get_manager_for_family,
+    get_manager_for_tool,
+    get_package_manager,
+    get_supported_tools,
+    is_tool_supported,
+)
 from nvidia_inst.distro.pacman import PacmanManager
 from nvidia_inst.distro.zypper import ZypperManager
 

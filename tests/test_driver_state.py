@@ -131,14 +131,18 @@ class TestDetectDriverState:
     def test_optimal_driver(self, mock_gpu, mock_driver_range):
         """Test detection when driver is optimal."""
         with (
-            patch("nvidia_inst.cli.main.get_current_driver_type") as mock_type,
-            patch("nvidia_inst.cli.main.is_nvidia_working") as mock_working,
-            patch("nvidia_inst.cli.main.is_driver_compatible") as mock_compat,
-            patch("nvidia_inst.cli.main.get_compatible_driver_packages") as mock_pkgs,
+            patch("nvidia_inst.cli.driver_state.get_current_driver_type") as mock_type,
+            patch("nvidia_inst.cli.driver_state.is_nvidia_working") as mock_working,
+            patch("nvidia_inst.gpu.compatibility.is_driver_compatible") as mock_compat,
             patch(
-                "nvidia_inst.cli.main.check_nvidia_open_available"
+                "nvidia_inst.installer.driver.get_compatible_driver_packages"
+            ) as mock_pkgs,
+            patch(
+                "nvidia_inst.cli.driver_state.check_nvidia_open_available"
             ) as mock_open_avail,
-            patch("nvidia_inst.cli.main.check_nonfree_available") as mock_nonfree_avail,
+            patch(
+                "nvidia_inst.cli.driver_state.check_nonfree_available"
+            ) as mock_nonfree_avail,
         ):
             mock_type.return_value = "proprietary"
             mock_working.return_value = MagicMock(
@@ -162,10 +166,12 @@ class TestDetectDriverState:
     def test_wrong_branch(self, mock_gpu, mock_driver_range):
         """Test detection when wrong branch installed."""
         with (
-            patch("nvidia_inst.cli.main.get_current_driver_type") as mock_type,
-            patch("nvidia_inst.cli.main.is_nvidia_working") as mock_working,
-            patch("nvidia_inst.cli.main.is_driver_compatible") as mock_compat,
-            patch("nvidia_inst.cli.main.get_compatible_driver_packages") as mock_pkgs,
+            patch("nvidia_inst.cli.driver_state.get_current_driver_type") as mock_type,
+            patch("nvidia_inst.cli.driver_state.is_nvidia_working") as mock_working,
+            patch("nvidia_inst.gpu.compatibility.is_driver_compatible") as mock_compat,
+            patch(
+                "nvidia_inst.installer.driver.get_compatible_driver_packages"
+            ) as mock_pkgs,
         ):
             mock_type.return_value = "proprietary"
             mock_working.return_value = MagicMock(
@@ -185,13 +191,17 @@ class TestDetectDriverState:
     def test_nouveau_active(self, mock_gpu, mock_driver_range):
         """Test detection when nouveau is active."""
         with (
-            patch("nvidia_inst.cli.main.get_current_driver_type") as mock_type,
-            patch("nvidia_inst.cli.main.is_nvidia_working") as mock_working,
-            patch("nvidia_inst.cli.main.get_compatible_driver_packages") as mock_pkgs,
+            patch("nvidia_inst.cli.driver_state.get_current_driver_type") as mock_type,
+            patch("nvidia_inst.cli.driver_state.is_nvidia_working") as mock_working,
             patch(
-                "nvidia_inst.cli.main.check_nvidia_open_available"
+                "nvidia_inst.installer.driver.get_compatible_driver_packages"
+            ) as mock_pkgs,
+            patch(
+                "nvidia_inst.cli.driver_state.check_nvidia_open_available"
             ) as mock_open_avail,
-            patch("nvidia_inst.cli.main.check_nonfree_available") as mock_nonfree_avail,
+            patch(
+                "nvidia_inst.cli.driver_state.check_nonfree_available"
+            ) as mock_nonfree_avail,
         ):
             mock_type.return_value = "nouveau"
             mock_working.return_value = MagicMock(is_working=False)
@@ -210,13 +220,17 @@ class TestDetectDriverState:
     def test_nothing_installed(self, mock_gpu, mock_driver_range):
         """Test detection when nothing installed."""
         with (
-            patch("nvidia_inst.cli.main.get_current_driver_type") as mock_type,
-            patch("nvidia_inst.cli.main.is_nvidia_working") as mock_working,
-            patch("nvidia_inst.cli.main.get_compatible_driver_packages") as mock_pkgs,
+            patch("nvidia_inst.cli.driver_state.get_current_driver_type") as mock_type,
+            patch("nvidia_inst.cli.driver_state.is_nvidia_working") as mock_working,
             patch(
-                "nvidia_inst.cli.main.check_nvidia_open_available"
+                "nvidia_inst.installer.driver.get_compatible_driver_packages"
+            ) as mock_pkgs,
+            patch(
+                "nvidia_inst.cli.driver_state.check_nvidia_open_available"
             ) as mock_open_avail,
-            patch("nvidia_inst.cli.main.check_nonfree_available") as mock_nonfree_avail,
+            patch(
+                "nvidia_inst.cli.driver_state.check_nonfree_available"
+            ) as mock_nonfree_avail,
         ):
             mock_type.return_value = "none"
             mock_working.return_value = MagicMock(is_working=False)

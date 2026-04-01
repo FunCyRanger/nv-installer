@@ -1,11 +1,10 @@
 """Tests for installer/prerequisites.py module."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from nvidia_inst.installer.prerequisites import (
-    PrerequisitesResult,
     PrerequisitesChecker,
+    PrerequisitesResult,
 )
 
 

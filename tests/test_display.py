@@ -1,21 +1,20 @@
 """Tests for cli/display.py module."""
 
-import pytest
-from unittest.mock import patch
 from io import StringIO
+from unittest.mock import patch
 
 from nvidia_inst.cli.display import (
+    format_package_list,
+    print_distro_info,
+    print_driver_status,
+    print_error,
+    print_gpu_info,
+    print_info,
     print_row,
     print_section_header,
     print_step,
-    print_warning,
-    print_error,
-    print_info,
     print_success,
-    format_package_list,
-    print_driver_status,
-    print_gpu_info,
-    print_distro_info,
+    print_warning,
 )
 
 

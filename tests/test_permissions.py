@@ -1,6 +1,5 @@
 """Tests for permission utilities."""
 
-import subprocess
 from unittest.mock import MagicMock, patch
 
 from nvidia_inst.utils import permissions

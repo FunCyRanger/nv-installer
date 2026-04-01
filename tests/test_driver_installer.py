@@ -1,21 +1,21 @@
 """Tests for installer/driver.py module."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from nvidia_inst.installer.driver import (
     DriverInstallError,
+    InstallResult,
+    KernelIncompatibleError,
     NouveauLoadedError,
     SecureBootError,
-    KernelIncompatibleError,
-    InstallResult,
-    check_nouveau,
-    check_nvidia_open_installed,
-    check_nvidia_open_available,
     check_nonfree_available,
+    check_nouveau,
+    check_nvidia_open_available,
     check_secure_boot,
-    get_current_driver_type,
     disable_nouveau,
+    get_current_driver_type,
 )
 
 

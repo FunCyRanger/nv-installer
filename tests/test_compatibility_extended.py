@@ -1,22 +1,18 @@
 """Tests for gpu/compatibility.py module."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from nvidia_inst.gpu.compatibility import (
     DriverRange,
-    get_driver_range,
+    _compare_versions,
+    _get_branch_max_minor,
+    _get_cuda_range,
+    get_cuda_major_version_lock,
+    get_recommended_cuda_version,
+    is_driver_compatible_with_branch,
     validate_cuda_version,
     validate_cuda_version_with_lock,
-    get_recommended_cuda_version,
-    get_cuda_major_version_lock,
     validate_driver_version,
-    is_driver_compatible_with_branch,
-    get_max_driver_version,
-    is_driver_compatible,
-    _compare_versions,
-    _get_cuda_range,
-    _get_branch_max_minor,
 )
 from nvidia_inst.gpu.detector import GPUInfo
 

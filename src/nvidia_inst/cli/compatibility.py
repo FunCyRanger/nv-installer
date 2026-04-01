@@ -19,7 +19,6 @@ from nvidia_inst.gpu.detector import (
     has_nvidia_gpu,
 )
 from nvidia_inst.gpu.hybrid import detect_hybrid, get_native_tool
-from nvidia_inst.installer.driver import check_nonfree_available
 from nvidia_inst.installer.prerequisites import PrerequisitesChecker
 from nvidia_inst.installer.validation import is_nvidia_working
 from nvidia_inst.utils.logger import get_logger
@@ -247,7 +246,7 @@ def print_version_check(
     """
     print("\nVersion Check:")
     if version_check.success:
-        print(f"[Y] Version check passed")
+        print("[Y] Version check passed")
         if version_check.repo_versions:
             print(f"  Available in repos: {', '.join(version_check.repo_versions[:3])}")
         if version_check.official_versions:
@@ -255,7 +254,7 @@ def print_version_check(
                 f"  Available from NVIDIA: {', '.join(version_check.official_versions[:3])}"
             )
     else:
-        print(f"[N] Version check failed")
+        print("[N] Version check failed")
         for error in version_check.errors:
             print(f"  Error: {error}")
 

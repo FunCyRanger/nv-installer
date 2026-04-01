@@ -1,20 +1,19 @@
 """Tests for package name maps."""
 
-import pytest
 
 from nvidia_inst.distro.packages import (
-    DRIVER_PACKAGES,
-    DRIVER_OPEN_PACKAGES,
-    CUDA_PACKAGES,
     CUDA_MAJOR_PACKAGES,
+    CUDA_PACKAGES,
+    DRIVER_OPEN_PACKAGES,
+    DRIVER_PACKAGES,
     NOUVEAU_REMOVE_PACKAGES,
     _get_package_from_map,
-    get_driver_packages,
-    get_driver_open_packages,
-    get_cuda_packages,
-    get_cuda_major_packages,
-    get_nouveau_remove_packages,
     format_package_name,
+    get_cuda_major_packages,
+    get_cuda_packages,
+    get_driver_open_packages,
+    get_driver_packages,
+    get_nouveau_remove_packages,
 )
 from nvidia_inst.distro.tools import PackageContext
 

@@ -5,7 +5,6 @@ package managers. Uses the tool-based approach from tools.py.
 """
 
 import shutil
-import subprocess
 
 from nvidia_inst.distro.tools import (
     get_install_command,

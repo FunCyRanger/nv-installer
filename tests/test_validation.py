@@ -6,11 +6,11 @@ from nvidia_inst.installer.validation import (
     SafetyCheckResult,
     ValidationResult,
     WorkingInstallResult,
-    is_nvidia_working,
-    pre_install_check,
-    post_install_validate,
-    unblock_nouveau,
     _check_secure_boot,
+    is_nvidia_working,
+    post_install_validate,
+    pre_install_check,
+    unblock_nouveau,
 )
 
 

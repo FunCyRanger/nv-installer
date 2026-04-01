@@ -1,19 +1,19 @@
 """Tests for tool-based package manager detection."""
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from nvidia_inst.distro.tools import (
-    PackageContext,
-    TOOL_FAMILIES,
-    TOOL_PRIORITY,
     DISTRO_FAMILIES,
-    detect_package_tool,
-    get_tool_family,
-    get_distro_family,
+    TOOL_FAMILIES,
+    PackageContext,
     detect_package_context,
+    detect_package_tool,
+    get_distro_family,
     get_install_command,
     get_remove_command,
+    get_tool_family,
     get_update_command,
     is_aur_tool,
     is_gui_tool,

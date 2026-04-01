@@ -1,14 +1,11 @@
 """Tests for distro/versionlock.py module."""
 
-import pytest
-from unittest.mock import patch, MagicMock, mock_open
-from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from nvidia_inst.distro.versionlock import (
-    read_versionlock_toml,
-    write_versionlock_toml,
-    pattern_entry_exists,
     add_pattern_versionlock_entry,
+    pattern_entry_exists,
+    read_versionlock_toml,
     verify_versionlock_pattern_active,
 )
 

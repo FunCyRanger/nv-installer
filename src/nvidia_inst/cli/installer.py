@@ -9,7 +9,6 @@ from dataclasses import dataclass
 
 from nvidia_inst.cli.commands import get_initramfs_command
 from nvidia_inst.distro.tools import (
-    PackageContext,
     get_install_command,
     get_remove_command,
 )

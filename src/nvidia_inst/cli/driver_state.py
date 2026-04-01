@@ -4,14 +4,14 @@ This module provides driver state detection and option building
 functionality for the CLI interface.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 
 from nvidia_inst.gpu.compatibility import DriverRange
 from nvidia_inst.gpu.detector import GPUInfo
 from nvidia_inst.installer.driver import (
-    check_nvidia_open_available,
     check_nonfree_available,
+    check_nvidia_open_available,
     get_current_driver_type,
 )
 from nvidia_inst.installer.validation import is_nvidia_working

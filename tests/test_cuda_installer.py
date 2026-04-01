@@ -1,18 +1,15 @@
 """Tests for installer/cuda.py module."""
 
-import pytest
-from unittest.mock import patch, MagicMock
 
+from nvidia_inst.distro.tools import PackageContext
 from nvidia_inst.installer.cuda import (
-    CUDAInstaller,
-    UbuntuCUDAInstaller,
-    FedoraCUDAInstaller,
     ArchCUDAInstaller,
-    get_cuda_installer,
+    FedoraCUDAInstaller,
+    UbuntuCUDAInstaller,
     _parse_cuda_version_from_package,
+    get_cuda_installer,
     get_cuda_packages_tool_based,
 )
-from nvidia_inst.distro.tools import PackageContext
 
 
 class TestUbuntuCUDAInstaller:
