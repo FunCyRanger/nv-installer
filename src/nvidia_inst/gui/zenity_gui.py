@@ -7,9 +7,9 @@ from nvidia_inst.cli import (
     DriverState,
     detect_driver_state,
     execute_driver_change,
-    get_driver_range,
 )
 from nvidia_inst.distro.detector import DistroDetectionError, detect_distro
+from nvidia_inst.gpu.compatibility import get_driver_range
 from nvidia_inst.gpu.detector import detect_gpu, has_nvidia_gpu
 from nvidia_inst.utils.logger import get_logger
 from nvidia_inst.utils.permissions import require_root
