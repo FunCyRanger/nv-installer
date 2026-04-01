@@ -10,6 +10,11 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+
 from nvidia_inst.distro.tools import detect_dnf_path, sudo_path
 from nvidia_inst.utils.logger import get_logger
 
@@ -22,8 +27,6 @@ def read_versionlock_toml() -> dict:
     Returns:
         Dictionary representing the TOML file, or empty structure if file doesn't exist.
     """
-    import tomllib
-
     versionlock_path = Path("/etc/dnf/versionlock.toml")
 
     if not versionlock_path.exists():

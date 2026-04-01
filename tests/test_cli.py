@@ -172,7 +172,7 @@ class TestCLIIntegration:
         """Test install_driver_cli when no GPU detected."""
         monkeypatch.setattr("sys.argv", ["nvidia-inst"])
         monkeypatch.setattr(
-            "nvidia_inst.cli.main.has_nvidia_gpu",
+            "nvidia_inst.gpu.detector.has_nvidia_gpu",
             lambda: False,
         )
         from nvidia_inst.cli import install_driver_cli
