@@ -135,17 +135,42 @@ class PacmanManager(PackageManager):
     def pin_version(self, package: str, version: str = "*") -> bool:
         """Pin package to version using pacman.
 
+        Arch Linux uses branch-specific packages instead of version locking:
+        - nvidia-open (latest, for Turing+ GPUs)
+        - nvidia-580xx-dkms (for Maxwell/Pascal/Volta - AUR)
+        - nvidia-470xx-dkms (for Kepler - AUR)
+
+        No version locking is needed because branch packages automatically
+        stay on the correct branch.
+
         Args:
-            package: Package name to lock.
-            version: Version pattern (for reference, not used).
+            package: Package name (should be branch-specific, e.g., "nvidia-580xx-dkms")
+            version: Not used for Arch (branch is in package name)
 
         Returns:
-            False - pacman uses LockPkg instead.
+            True (no locking needed for branch packages)
         """
-        logger.warning("Use pacman LockPkg to prevent upgrades:")
-        logger.info(f"  sudo pacman -D --lock {package}")
-        logger.info(f"  sudo pacman -D --unlock {package}  # to unlock")
-        return False
+        logger.info(f"Arch: Using branch package {package} (no version lock needed)")
+        return True
+
+    def get_branch_package(self, branch: str) -> str:
+        """Get the correct branch-specific package name for Arch Linux.
+
+        Args:
+            branch: Driver branch (e.g., "580", "470")
+
+        Returns:
+            Branch-specific package name
+        """
+        # For latest hardware (Turing+), use rolling package
+        # For older hardware, use branch-specific packages
+        branch_packages = {
+            "595": "nvidia-open",  # Latest (Blackwell)
+            "590": "nvidia-open",  # Latest (Turing+)
+            "580": "nvidia-580xx-dkms",  # Maxwell/Pascal/Volta
+            "470": "nvidia-470xx-dkms",  # Kepler
+        }
+        return branch_packages.get(branch, "nvidia-open")
 
     def get_all_versions(self, package: str) -> list[str]:
         """Get available nvidia driver branch packages for Arch Linux.

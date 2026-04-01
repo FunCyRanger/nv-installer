@@ -256,6 +256,28 @@ class TestDnfManager:
         )
         assert sorted_versions == ["535.154.05", "535.54.06", "535.43.02"]
 
+    def test_get_all_versions_returns_branch_versions(
+        self, dnf_manager, mock_subprocess_run
+    ):
+        """Test that get_all_versions returns versions from the correct branch."""
+        mock_subprocess_run.return_value = MagicMock(
+            returncode=0,
+            stdout="""Available Packages
+akmod-nvidia.x86_64    3:580.142-1.fc43    cuda
+akmod-nvidia.x86_64    3:580.126-1.fc43    cuda
+akmod-nvidia.x86_64    3:575.57-1.fc43     cuda
+akmod-nvidia.x86_64    3:570.148-1.fc43    cuda
+""",
+            stderr="",
+        )
+        versions = dnf_manager.get_all_versions("akmod-nvidia")
+        # Should return versions sorted by newest first
+        assert len(versions) == 4
+        assert versions[0] == "580.142"  # Latest version
+        assert "580.126" in versions
+        assert "575.57" in versions
+        assert "570.148" in versions
+
 
 class TestDnfManagerIntegration:
     """Integration-style tests for DNF manager."""

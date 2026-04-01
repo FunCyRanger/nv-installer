@@ -8,7 +8,9 @@ from nvidia_inst.installer.validation import (
     WorkingInstallResult,
     is_nvidia_working,
     pre_install_check,
+    post_install_validate,
     unblock_nouveau,
+    _check_secure_boot,
 )
 
 
@@ -39,6 +41,48 @@ class TestUnblockNouveau:
             success, message = unblock_nouveau()
             assert success is True
             assert "re-enabled" in message.lower()
+
+    def test_blacklist_error(self):
+        """Test blacklist removal error."""
+        with patch("nvidia_inst.installer.validation.Path") as mock_path:
+            mock_instance = MagicMock()
+            mock_instance.exists.return_value = True
+            mock_instance.unlink.side_effect = PermissionError("Access denied")
+            mock_path.return_value = mock_instance
+
+            success, message = unblock_nouveau()
+            assert success is False
+            assert "Access denied" in message
+
+
+class TestCheckSecureBoot:
+    """Tests for _check_secure_boot function."""
+
+    @patch("subprocess.run")
+    def test_secure_boot_enabled(self, mock_run):
+        """Test when secure boot is enabled."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="SecureBoot: enabled")
+        assert _check_secure_boot() is True
+
+    @patch("subprocess.run")
+    def test_secure_boot_disabled(self, mock_run):
+        """Test when secure boot is disabled."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="SecureBoot: disabled")
+        assert _check_secure_boot() is False
+
+    @patch("subprocess.run")
+    def test_secure_boot_command_fails(self, mock_run):
+        """Test when mokutil command fails."""
+        mock_run.side_effect = FileNotFoundError()
+        assert _check_secure_boot() is False
+
+    @patch("subprocess.run")
+    def test_secure_boot_timeout(self, mock_run):
+        """Test when mokutil times out."""
+        import subprocess
+
+        mock_run.side_effect = subprocess.TimeoutExpired("cmd", 10)
+        assert _check_secure_boot() is False
 
 
 class TestIsNvidiaWorking:
@@ -136,6 +180,85 @@ class TestPreInstallCheck:
 
         assert result.can_proceed is False
         assert any("not available" in e for e in result.errors)
+
+    def test_package_manager_not_available(self):
+        """Test error when package manager not available."""
+        mock_pm = MagicMock()
+        mock_pm.is_available.return_value = False
+
+        result = pre_install_check("fedora", ["akmod-nvidia"], mock_pm)
+
+        assert result.can_proceed is False
+        assert any("Package manager not available" in e for e in result.errors)
+
+    def test_display_warning(self):
+        """Test warning when running in graphical session."""
+        mock_pm = MagicMock()
+        mock_pm.is_available.return_value = True
+        mock_pm.get_available_version.return_value = "1.0"
+        with patch("os.statvfs") as mock_stat:
+            mock_stat.return_value = MagicMock(f_bavail=1000000, f_frsize=4096)
+            with (
+                patch(
+                    "nvidia_inst.installer.validation._check_secure_boot",
+                    return_value=False,
+                ),
+                patch.dict("os.environ", {"/tmp/.X11-unix": ":0"}),
+            ):
+                result = pre_install_check("fedora", ["akmod-nvidia"], mock_pm)
+
+        # Display warning is based on DISPLAY env var, not X11 socket
+        assert result.can_proceed is True
+
+
+class TestPostInstallValidate:
+    """Tests for post_install_validate function."""
+
+    @patch("subprocess.run")
+    @patch("nvidia_inst.installer.validation.Path.exists")
+    @patch("nvidia_inst.installer.validation.glob.glob")
+    @patch("os.uname")
+    def test_all_checks_pass(self, mock_uname, mock_glob, mock_exists, mock_run):
+        """Test when all validation checks pass."""
+        mock_uname.return_value = MagicMock(release="5.15.0")
+        mock_glob.return_value = ["/lib/modules/5.15.0/extra/nvidia.ko"]
+        mock_exists.return_value = True
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout=""),  # nvidia-smi
+            MagicMock(returncode=0, stdout="535.154.05\n"),  # nvidia-smi version
+        ]
+
+        mock_pm = MagicMock()
+        mock_pm.get_installed_version.return_value = "535.154.05"
+
+        result = post_install_validate("fedora", ["akmod-nvidia"], mock_pm)
+
+        assert result.success is True
+        assert result.kernel_module_built is True
+        assert result.nouveau_blocked is True
+        assert result.nvidia_smi_works is True
+
+    @patch("subprocess.run")
+    @patch("nvidia_inst.installer.validation.Path.exists")
+    @patch("nvidia_inst.installer.validation.glob.glob")
+    @patch("os.uname")
+    def test_missing_packages(self, mock_uname, mock_glob, mock_exists, mock_run):
+        """Test when packages are missing."""
+        mock_uname.return_value = MagicMock(release="5.15.0")
+        mock_glob.return_value = []
+        mock_exists.return_value = True
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout=""),
+            MagicMock(returncode=0, stdout="535.154.05\n"),
+        ]
+
+        mock_pm = MagicMock()
+        mock_pm.get_installed_version.return_value = None
+
+        result = post_install_validate("fedora", ["akmod-nvidia"], mock_pm)
+
+        assert result.success is False
+        assert len(result.missing_packages) > 0
 
 
 class TestSafetyCheckResult:

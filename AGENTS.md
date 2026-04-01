@@ -9,12 +9,25 @@ Supports Ubuntu, Fedora, Arch, Debian and detects GPU/distro automatically.
 pip install -r requirements.txt          # Install dependencies
 ruff check . && shellcheck nv-install scripts/*.sh  # Linting (Python + Bash)
 black .                                  # Formatting (line-length: 88)
-mypy .                                   # Type checking
+mypy src/                                # Type checking (targets src/ directory)
 pytest                                   # Run all tests
 pytest tests/ -k "test_name"             # Run single test by name
 pytest tests/test_gpu.py::TestClass::test_method  # Specific method
 make lint, make test, make format        # Make targets
 ```
+
+## Coverage Commands
+
+```bash
+pytest tests/ -v --cov=nvidia_inst --cov-report=term-missing  # Run tests with coverage
+make coverage                           # Run tests with coverage (Makefile)
+make coverage-xml                       # Generate XML report for CI
+```
+
+**Coverage Requirements:**
+- Minimum coverage: 70% (configured in pyproject.toml)
+- GUI modules (tkinter_gui.py, zenity_gui.py) are excluded from coverage
+- CI fails if coverage drops below threshold
 
 ## Code Style Guidelines
 
@@ -91,6 +104,18 @@ function install_driver() {
 }
 ```
 
+## Ruff Rules (from pyproject.toml)
+
+- **E**: pycodestyle errors
+- **F**: pyflakes
+- **W**: pycodestyle warnings
+- **I**: isort (import sorting)
+- **N**: pep8-naming
+- **UP**: pyupgrade (Python 3.10+ syntax)
+- **B**: flake8-bugbear
+- **C4**: flake8-comprehensions
+- **SIM**: flake8-simplify
+
 ## Safety Guidelines
 
 - **NEVER** install drivers without user confirmation
@@ -98,10 +123,6 @@ function install_driver() {
 - Log all operations to `/var/log/nvidia-inst/install.log`
 - Require root/sudo for installation
 - Exit code 0 when no GPU detected (not an error)
-
-## Domain Knowledge
-
-For CUDA compatibility, driver versions, GPU generations, and hybrid graphics details, see **ARCHITECTURE.md**.
 
 ## Project Structure
 

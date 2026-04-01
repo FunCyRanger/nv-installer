@@ -158,6 +158,63 @@ class ZypperManager(PackageManager):
             logger.error(f"Failed to lock package: {e.stderr}")
             return False
 
+    def pin_to_major_version(self, package: str, major: str) -> bool:
+        """Lock package to major version using negative version lock.
+
+        This follows NVIDIA's official approach for openSUSE:
+        - Lock "package >= X+1" to exclude newer major versions
+        - Allows all versions < X+1 (including minor updates)
+
+        Args:
+            package: Package name pattern (e.g., "*nvidia*")
+            major: Major version to stay on (e.g., "580")
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        try:
+            # Calculate next major version (what we want to exclude)
+            next_major = str(int(major) + 1)
+
+            # Add negative lock: exclude versions >= next_major
+            # This allows all versions < next_major (i.e., 580.x and below)
+            lock_spec = f"{package} >= {next_major}"
+
+            subprocess.run(
+                [self._zypper_path, "addlock", lock_spec],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            logger.info(f"Added zypper lock: {lock_spec}")
+            return True
+
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to add zypper lock: {e.stderr}")
+            return False
+
+    def remove_lock(self, package: str) -> bool:
+        """Remove a package lock.
+
+        Args:
+            package: Package name to unlock.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        try:
+            subprocess.run(
+                [self._zypper_path, "removelock", package],
+                check=True,
+                capture_output=True,
+            )
+            logger.info(f"Removed lock for {package}")
+            return True
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to remove lock: {e.stderr}")
+            return False
+
     def get_all_versions(self, package: str) -> list[str]:
         """Get all available versions of a package using zypper."""
         try:

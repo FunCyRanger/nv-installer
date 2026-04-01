@@ -1,5 +1,8 @@
 # nvidia-inst
 
+![Coverage](https://img.shields.io/badge/coverage-check%20CI%20logs-blue)
+![CI](https://github.com/nvidia-inst/nvidia-inst/actions/workflows/ci.yml/badge.svg)
+
 > **⚠️ DISCLAIMER & WARNING**
 >
 > **This software is provided for testing and development purposes ONLY.**

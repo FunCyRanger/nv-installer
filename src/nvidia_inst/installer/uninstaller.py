@@ -101,6 +101,14 @@ def revert_to_nouveau(distro_id: str) -> RevertResult:
         apt_removed = _remove_apt_preferences(packages)
         result.apt_preferences_removed = apt_removed
 
+    if distro_id == "opensuse":
+        zypper_removed = _remove_zypper_locks(packages)
+        result.versionlock_removed = zypper_removed
+
+    if distro_id in ("arch", "manjaro"):
+        pacman_removed = _remove_pacman_locks(packages)
+        result.versionlock_removed = pacman_removed
+
     _remove_blacklist()
 
     # Remove CUDA environment script
@@ -414,6 +422,55 @@ def _remove_apt_preferences(packages: list[str]) -> list[str]:
                 logger.info(f"Removed apt preferences: {pref_file}")
         except Exception as e:
             logger.warning(f"Failed to remove {pref_file}: {e}")
+    return removed
+
+
+def _remove_zypper_locks(packages: list[str]) -> list[str]:
+    """Remove zypper locks for packages on openSUSE.
+
+    Tries to remove locks for both the package name and version constraints.
+    """
+    removed = []
+    for pkg_pattern in packages:
+        # Extract base package name
+        base_name = pkg_pattern.split("=")[0].split(">=")[0].split("<")[0].strip()
+        base_name = base_name.replace("-*", "").replace("*", "")
+
+        try:
+            # Try to remove lock by package name
+            result = subprocess.run(
+                ["zypper", "removelock", base_name],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                removed.append(base_name)
+                logger.info(f"Removed zypper lock: {base_name}")
+            elif "not found" not in result.stderr.lower():
+                logger.warning(f"Zypper lock removal warning: {result.stderr}")
+        except Exception as e:
+            logger.warning(f"Failed to remove zypper lock for {base_name}: {e}")
+
+    return removed
+
+
+def _remove_pacman_locks(packages: list[str]) -> list[str]:
+    """Remove pacman locks for packages on Arch Linux."""
+    removed = []
+    for pkg in packages:
+        try:
+            result = subprocess.run(
+                ["pacman", "-D", "--unlock", pkg],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                removed.append(pkg)
+                logger.info(f"Removed pacman lock: {pkg}")
+        except Exception as e:
+            logger.warning(f"Failed to remove pacman lock for {pkg}: {e}")
     return removed
 
 

@@ -3,14 +3,36 @@
 import argparse
 import subprocess
 import sys
-from dataclasses import dataclass
-from enum import Enum
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from nvidia_inst.distro.tools import PackageContext
-
+from nvidia_inst.cli.compatibility import (
+    check_compatibility,
+    check_prerequisites,
+    print_compatibility_info,
+    print_version_check,
+)
+from nvidia_inst.cli.commands import (
+    get_initramfs_command,
+    get_nouveau_remove_command,
+    sudo_path,
+)
+from nvidia_inst.cli.driver_state import (
+    DriverOption,
+    DriverState,
+    DriverStatus,
+    detect_driver_state,
+    show_driver_options,
+)
+from nvidia_inst.cli.installer import (
+    InstallResult,
+    get_packages_to_remove,
+    install_cuda_packages,
+    install_driver_packages,
+    prompt_reboot,
+    rebuild_initramfs,
+    remove_packages,
+)
+from nvidia_inst.cli.parser import parse_args
 from nvidia_inst.distro.detector import (
     DistroDetectionError,
     DistroInfo,
@@ -34,6 +56,7 @@ from nvidia_inst.gpu.hybrid import (
     detect_hybrid,
     get_native_tool,
 )
+from nvidia_inst.gui import detect_gui_type, launch_gui
 from nvidia_inst.installer.cuda import get_cuda_installer
 from nvidia_inst.installer.driver import (
     check_nonfree_available,
@@ -68,41 +91,6 @@ from nvidia_inst.installer.validation import (
     is_nvidia_working,
 )
 from nvidia_inst.utils.logger import get_logger, setup_logging
-
-
-class DriverStatus(Enum):
-    """Driver installation status."""
-
-    OPTIMAL = "optimal"
-    WRONG_BRANCH = "wrong_branch"
-    NVIDIA_OPEN_ACTIVE = "nvidia_open_active"
-    NOUVEAU_ACTIVE = "nouveau_active"
-    BROKEN_INSTALL = "broken_install"
-    NOTHING = "nothing"
-
-
-@dataclass
-class DriverOption:
-    """A menu option for driver management."""
-
-    number: int
-    description: str
-    action: str
-    recommended: bool = False
-
-
-@dataclass
-class DriverState:
-    """Current state of NVIDIA driver installation."""
-
-    status: DriverStatus
-    current_version: str | None
-    is_compatible: bool
-    is_optimal: bool
-    suggested_packages: list[str] | None
-    options: list[DriverOption]
-    message: str
-    cuda_range: str | None = None
 
 
 logger = get_logger(__name__)
@@ -1703,9 +1691,9 @@ def execute_driver_change(
             )
             try:
                 # Add pattern-based versionlock for driver
-                driver_pattern = f"akmod-nvidia-{driver_range.max_branch}.*"
+                driver_package = "akmod-nvidia"
                 driver_lock_success, driver_lock_msg = _add_pattern_versionlock_entry(
-                    driver_pattern,
+                    driver_package,
                     driver_range.max_branch,
                     f"Lock NVIDIA driver to branch {driver_range.max_branch}.x",
                 )
@@ -1713,7 +1701,7 @@ def execute_driver_change(
                 if driver_lock_success:
                     # Verify the lock
                     verified, verify_msg = _verify_versionlock_pattern_active(
-                        driver_pattern, driver_range.max_branch
+                        driver_package, driver_range.max_branch
                     )
                     if verified:
                         print(f"           Driver lock applied: {verify_msg}")
@@ -1749,17 +1737,18 @@ def execute_driver_change(
                     print(f"           {cuda_repo_msg}")
 
                 # Add pattern-based versionlock for CUDA
-                cuda_pattern = f"cuda-toolkit-{driver_range.cuda_locked_major}.*"
+                cuda_package = "cuda-toolkit"
                 cuda_lock_success, cuda_lock_msg = _add_pattern_versionlock_entry(
-                    cuda_pattern,
+                    cuda_package,
                     driver_range.cuda_locked_major,
                     f"Lock CUDA toolkit to major version {driver_range.cuda_locked_major}.x",
+                    max_version=driver_range.cuda_max,
                 )
 
                 if cuda_lock_success:
                     # Verify the lock
                     verified, verify_msg = _verify_versionlock_pattern_active(
-                        cuda_pattern, driver_range.cuda_locked_major
+                        cuda_package, driver_range.cuda_locked_major
                     )
                     if verified:
                         print(f"           CUDA lock applied: {verify_msg}")
@@ -1813,9 +1802,9 @@ def execute_driver_change(
                     return 1
 
                 # Verify the lock
-                lock_pattern = f"akmod-nvidia-{driver_range.max_branch}.*"
+                lock_package = "akmod-nvidia"
                 verified, verify_msg = _verify_versionlock_pattern(
-                    distro.id, lock_pattern, "driver"
+                    distro.id, lock_package, "driver"
                 )
 
                 if verified:
@@ -1869,9 +1858,9 @@ def execute_driver_change(
                     return 1
 
                 # Verify the lock
-                lock_pattern = f"cuda-toolkit-{driver_range.cuda_locked_major}-*"
+                lock_package = "cuda-toolkit"
                 verified, verify_msg = _verify_versionlock_pattern(
-                    distro.id, lock_pattern, "cuda"
+                    distro.id, lock_package, "cuda"
                 )
 
                 if verified:
@@ -2439,14 +2428,16 @@ def _print_action_plan(
             step += 1
         # Lock driver BEFORE install (if limited/EOL) - pattern-based
         if driver_range.is_limited and driver_range.max_branch:
-            pattern = f"akmod-nvidia-{driver_range.max_branch}.*"
-            lock_str = f"Lock {pattern} to branch {driver_range.max_branch}.x (TOML)"
+            driver_package = "akmod-nvidia"
+            lock_str = (
+                f"Lock {driver_package} to branch {driver_range.max_branch}.x (TOML)"
+            )
             print(f"│  {step}. {lock_str:<55}│")
             step += 1
         # Lock CUDA BEFORE install (if locked) - pattern-based
         if driver_range.cuda_is_locked and driver_range.cuda_locked_major:
-            cuda_pattern = f"cuda-toolkit-{driver_range.cuda_locked_major}.*"
-            cuda_lock_str = f"Lock {cuda_pattern} to branch {driver_range.cuda_locked_major}.x (TOML)"
+            cuda_package = "cuda-toolkit"
+            cuda_lock_str = f"Lock {cuda_package} to major version {driver_range.cuda_locked_major}.x (TOML)"
             print(f"│  {step}. {cuda_lock_str:<55}│")
             step += 1
         # Remove incompatible CUDA if needed
@@ -2702,17 +2693,15 @@ def _run_dry_run(
 
     # Step 3: Lock driver BEFORE install (if limited/EOL) - pattern-based
     if driver_range.is_limited and driver_range.max_branch:
-        pattern = f"akmod-nvidia-{driver_range.max_branch}.*"
-        lock_str = f"Lock {pattern} to branch {driver_range.max_branch}.x (TOML)"
+        driver_package = "akmod-nvidia"
+        lock_str = f"Lock {driver_package} to branch {driver_range.max_branch}.x (TOML)"
         print(f"│  {step}. {lock_str:<56} │")
         step += 1
 
     # Step 4: Lock CUDA BEFORE install (if locked) - pattern-based
     if driver_range.cuda_is_locked and driver_range.cuda_locked_major:
-        cuda_pattern = f"cuda-toolkit-{driver_range.cuda_locked_major}.*"
-        cuda_lock_str = (
-            f"Lock {cuda_pattern} to branch {driver_range.cuda_locked_major}.x (TOML)"
-        )
+        cuda_package = "cuda-toolkit"
+        cuda_lock_str = f"Lock {cuda_package} to major version {driver_range.cuda_locked_major}.x (TOML)"
         print(f"│  {step}. {cuda_lock_str:<56} │")
         step += 1
 
@@ -3058,7 +3047,7 @@ def _pattern_entry_exists(data: dict, pattern: str) -> bool:
 
     Args:
         data: Parsed TOML data
-        pattern: Package pattern to check (e.g., 'cuda-toolkit-12.*')
+        pattern: Package name to check (e.g., 'cuda-toolkit')
 
     Returns:
         True if entry exists, False otherwise.
@@ -3067,7 +3056,10 @@ def _pattern_entry_exists(data: dict, pattern: str) -> bool:
 
 
 def _add_pattern_versionlock_entry(
-    package_pattern: str, major_version: str, comment: str = ""
+    package_name: str,
+    major_version: str,
+    comment: str = "",
+    max_version: str | None = None,
 ) -> tuple[bool, str]:
     """Add pattern-based versionlock entry to lock to a major version.
 
@@ -3075,9 +3067,10 @@ def _add_pattern_versionlock_entry(
     Allows minor/bugfix updates within the branch while blocking major version changes.
 
     Args:
-        package_pattern: Package name pattern (e.g., 'cuda-toolkit-12.*' or 'akmod-nvidia-580.*')
+        package_name: Package name (e.g., 'cuda-toolkit' or 'akmod-nvidia')
         major_version: Major version to lock (e.g., '12' or '580')
         comment: Optional description
+        max_version: Optional max version for upper bound (e.g., '12.8' -> evr < 12.9)
 
     Returns:
         Tuple of (success, message)
@@ -3086,19 +3079,29 @@ def _add_pattern_versionlock_entry(
     data = _read_versionlock_toml()
 
     # Check if entry already exists
-    if _pattern_entry_exists(data, package_pattern):
-        logger.info(f"Pattern {package_pattern} already locked")
-        return True, f"Pattern {package_pattern} already locked"
+    if _pattern_entry_exists(data, package_name):
+        logger.info(f"Package {package_name} already locked")
+        return True, f"Package {package_name} already locked"
 
     # Create new entry with branch-based conditions
-    # Lock to: major_version <= X < major_version + 1
-    next_major = str(int(major_version) + 1)
+    # Lock to: major_version <= X < upper_bound
+    # If max_version is specified (e.g., "12.8"), use max_version + 0.1 as upper bound
+    # Otherwise, use major_version + 1
+    if max_version:
+        # Convert max_version (e.g., "12.8") to upper bound (e.g., "12.9")
+        parts = max_version.split(".")
+        if len(parts) == 2:
+            upper_bound = f"{parts[0]}.{int(parts[1]) + 1}"
+        else:
+            upper_bound = str(int(max_version) + 1)
+    else:
+        upper_bound = str(int(major_version) + 1)
 
     new_entry = {
-        "name": package_pattern,
+        "name": package_name,
         "conditions": [
             {"key": "evr", "comparator": ">=", "value": major_version},
-            {"key": "evr", "comparator": "<", "value": next_major},
+            {"key": "evr", "comparator": "<", "value": upper_bound},
         ],
     }
 
@@ -3117,19 +3120,19 @@ def _add_pattern_versionlock_entry(
     success, msg = _write_versionlock_toml(data)
 
     if success:
-        logger.info(f"Added versionlock entry: {package_pattern} ({major_version}.x)")
-        return True, f"Locked {package_pattern} to major version {major_version}.x"
+        logger.info(f"Added versionlock entry: {package_name} ({major_version}.x)")
+        return True, f"Locked {package_name} to major version {major_version}.x"
 
     return False, msg
 
 
 def _verify_versionlock_pattern_active(
-    package_pattern: str, major_version: str
+    package_name: str, major_version: str
 ) -> tuple[bool, str]:
-    """Verify that a pattern-based versionlock entry is active and correct.
+    """Verify that a versionlock entry is active and correct.
 
     Args:
-        package_pattern: Package pattern (e.g., 'cuda-toolkit-12.*')
+        package_name: Package name (e.g., 'cuda-toolkit')
         major_version: Major version that should be locked
 
     Returns:
@@ -3138,7 +3141,7 @@ def _verify_versionlock_pattern_active(
     data = _read_versionlock_toml()
 
     for pkg in data.get("packages", []):
-        if pkg.get("name") == package_pattern:
+        if pkg.get("name") == package_name:
             conditions = pkg.get("conditions", [])
             # Check if we have >= and < conditions
             has_lower = False
@@ -3151,20 +3154,18 @@ def _verify_versionlock_pattern_active(
                         and cond.get("value") == major_version
                     ):
                         has_lower = True
-                    if cond.get("comparator") == "<" and cond.get("value") == str(
-                        int(major_version) + 1
-                    ):
+                    if cond.get("comparator") == "<":
                         has_upper = True
 
             if has_lower and has_upper:
                 return (
                     True,
-                    f"Pattern {package_pattern} verified: locked to {major_version}.x",
+                    f"Package {package_name} verified: locked to {major_version}.x",
                 )
 
-            return True, f"Pattern {package_pattern} exists but conditions differ"
+            return True, f"Package {package_name} exists but conditions differ"
 
-    return False, f"No versionlock entry found for {package_pattern}"
+    return False, f"No versionlock entry found for {package_name}"
 
 
 def _get_update_command(distro_id: str) -> str:
@@ -3249,8 +3250,8 @@ def _get_driver_lock_command(distro_id: str, branch: str) -> list[str]:
         ]
     elif distro_id == "fedora":
         dnf_path = _detect_dnf_path()
-        pattern = f"akmod-nvidia-{branch}.*"
-        return [sudo_path(), dnf_path, "versionlock", "add", pattern]
+        package = "akmod-nvidia"
+        return [sudo_path(), dnf_path, "versionlock", "add", package]
     elif distro_id == "arch":
         return [sudo_path(), "pacman", "-D", "--lock", f"nvidia-{branch}xx"]
     elif distro_id == "opensuse":
@@ -3262,8 +3263,8 @@ def _get_driver_unlock_command(distro_id: str, branch: str) -> list[str] | None:
     """Get command to unlock driver from branch."""
     if distro_id == "fedora":
         dnf_path = _detect_dnf_path()
-        pattern = f"akmod-nvidia-{branch}.*"
-        return [sudo_path(), dnf_path, "versionlock", "delete", pattern]
+        package = "akmod-nvidia"
+        return [sudo_path(), dnf_path, "versionlock", "delete", package]
     return None
 
 
@@ -3281,8 +3282,8 @@ def _get_cuda_lock_command(distro_id: str, major: str) -> list[str]:
         ]
     elif distro_id == "fedora":
         dnf_path = _detect_dnf_path()
-        pattern = f"cuda-toolkit-{major}-*"
-        return [sudo_path(), dnf_path, "versionlock", "add", pattern]
+        package = "cuda-toolkit"
+        return [sudo_path(), dnf_path, "versionlock", "add", package]
     elif distro_id == "arch":
         return [sudo_path(), "pacman", "-D", "--lock", f"cuda-{major}*"]
     elif distro_id == "opensuse":
@@ -3300,13 +3301,13 @@ def _get_cuda_unlock_command(distro_id: str, major: str) -> list[str] | None:
 
 
 def _verify_versionlock_pattern(
-    distro_id: str, package_pattern: str, lock_type: str
+    distro_id: str, package_name: str, lock_type: str
 ) -> tuple[bool, str]:
     """Verify that a versionlock entry matches the expected pattern.
 
     Args:
         distro_id: Distribution ID
-        package_pattern: Expected package pattern (e.g., 'akmod-nvidia-580.*')
+        package_name: Package name (e.g., 'akmod-nvidia', 'cuda-toolkit')
         lock_type: Type of lock ('driver' or 'cuda')
 
     Returns:
@@ -3332,27 +3333,20 @@ def _verify_versionlock_pattern(
 
         output = result.stdout
 
-        # Extract package name from pattern (e.g., 'akmod-nvidia-580.*' -> 'akmod-nvidia')
-        base_pattern = package_pattern.rsplit("-", 1)[0]
         # Handle patterns like 'cuda-toolkit-12-*'
-        if lock_type == "cuda" and "cuda-toolkit" in package_pattern:
-            # Extract major version from pattern (e.g., "12" from "cuda-toolkit-12-*")
-            major = package_pattern.split("-")[2].replace("*", "")
-
+        if lock_type == "cuda" and "cuda-toolkit" in package_name:
             # Look for any cuda-toolkit entry with matching major version
             lines = output.split("\n")
             for line in lines:
-                if "cuda-toolkit" in line and major in line:
+                if "cuda-toolkit" in line:
                     # Extract evr
                     match = re.search(r"evr\s*=\s*(.+?)(?:\s|$)", line)
                     if match:
                         evr = match.group(1).strip()
-                        # Verify the version contains our major version
-                        if major in evr:
-                            return (
-                                True,
-                                f"Versionlock verified: cuda-toolkit-{major}.* (locked to {evr})",
-                            )
+                        return (
+                            True,
+                            f"Versionlock verified: cuda-toolkit (locked to {evr})",
+                        )
 
             # Check if any cuda-toolkit exists at all (no specific version check)
             if "cuda-toolkit" in output:
@@ -3361,14 +3355,14 @@ def _verify_versionlock_pattern(
                     "Versionlock verified: cuda-toolkit (version check skipped)",
                 )
 
-            return False, f"No versionlock found for cuda-toolkit-{major}.*"
+            return False, "No versionlock found for cuda-toolkit"
 
         # Check if we found our lock entry
-        if base_pattern in output:
+        if package_name in output:
             # Check if it's a pattern lock (has *) or specific version
             lines = output.split("\n")
             for line in lines:
-                if base_pattern in line:
+                if package_name in line:
                     # Extract evr part
                     match = re.search(r"evr\s*=\s*(.+?)(?:\s|$)", line)
                     if match:
@@ -3378,23 +3372,15 @@ def _verify_versionlock_pattern(
                             return True, f"Versionlock verified (pattern): {evr}"
                         # If evr matches our pattern (e.g., 580.126.18 matches 580.*)
                         else:
-                            # Check if version matches branch
-                            pkg_branch = package_pattern.split("-")[1].replace(".*", "")
-                            if pkg_branch in evr.split(".")[0]:
-                                return (
-                                    True,
-                                    f"Versionlock verified (branch match): {evr}",
-                                )
-                            else:
-                                return (
-                                    False,
-                                    f"Lock exists but wrong version: {evr} (expected branch {pkg_branch}.x)",
-                                )
+                            return (
+                                True,
+                                f"Versionlock verified: {evr}",
+                            )
 
             # Found package but couldn't determine evr
             return True, "Versionlock exists"
 
-        return False, f"No versionlock found for {base_pattern}"
+        return False, f"No versionlock found for {package_name}"
 
     except subprocess.TimeoutExpired:
         return False, "Verification timed out"

@@ -190,6 +190,41 @@ class TestZypperManager:
         result = zypper_manager.pin_version("x11-video-nvidiaG05", "535.154.05")
         assert result is False
 
+    def test_pin_to_major_version_success(self, zypper_manager, mock_subprocess_run):
+        """Test successful major version locking via negative lock."""
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        result = zypper_manager.pin_to_major_version("*nvidia*", "580")
+        assert result is True
+        call_args = mock_subprocess_run.call_args[0][0]
+        assert "addlock" in call_args
+        # Should add lock for >= 581 (next major)
+        assert "*nvidia* >= 581" in call_args
+
+    def test_pin_to_major_version_failure(self, zypper_manager, mock_subprocess_run):
+        """Test major version locking failure."""
+        mock_subprocess_run.side_effect = subprocess.CalledProcessError(
+            1, "zypper addlock", stderr="Error"
+        )
+        result = zypper_manager.pin_to_major_version("*nvidia*", "580")
+        assert result is False
+
+    def test_remove_lock_success(self, zypper_manager, mock_subprocess_run):
+        """Test successful lock removal."""
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        result = zypper_manager.remove_lock("x11-video-nvidiaG05")
+        assert result is True
+        call_args = mock_subprocess_run.call_args[0][0]
+        assert "removelock" in call_args
+        assert "x11-video-nvidiaG05" in call_args
+
+    def test_remove_lock_failure(self, zypper_manager, mock_subprocess_run):
+        """Test lock removal failure."""
+        mock_subprocess_run.side_effect = subprocess.CalledProcessError(
+            1, "zypper removelock", stderr="Error"
+        )
+        result = zypper_manager.remove_lock("x11-video-nvidiaG05")
+        assert result is False
+
     def test_get_all_versions(
         self, zypper_manager, mock_subprocess_run, zypper_packages_output
     ):
@@ -209,6 +244,28 @@ class TestZypperManager:
         )
         versions = zypper_manager.get_all_versions("nvidia-driver")
         assert versions == []
+
+    def test_get_all_versions_returns_branch_versions(
+        self, zypper_manager, mock_subprocess_run
+    ):
+        """Test that get_all_versions returns versions from the correct branch."""
+        mock_subprocess_run.return_value = MagicMock(
+            returncode=0,
+            stdout="""| nvidia-compute-G06 | 580.82.07-1 | x86_64 | cuda
+| nvidia-compute-G06 | 580.65.06-1 | x86_64 | cuda
+| nvidia-compute-G06 | 575.57.08-1 | x86_64 | cuda
+| nvidia-compute-G06 | 570.148.08-1 | x86_64 | cuda
+""",
+            stderr="",
+        )
+        versions = zypper_manager.get_all_versions("nvidia-compute-G06")
+        # Should return versions sorted by newest first
+        # Note: zypper parses version from column index 1 and splits on "-"
+        assert len(versions) == 4
+        assert "580.82.07" in versions[0]  # Latest version
+        assert any("580.65" in v for v in versions)
+        assert any("575.57" in v for v in versions)
+        assert any("570.148" in v for v in versions)
 
     def test_version_sort_key(self, zypper_manager):
         """Test version sorting."""

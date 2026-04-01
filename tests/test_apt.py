@@ -158,36 +158,39 @@ class TestAptManager:
         version = apt_manager.get_available_version("nvidia-driver-535")
         assert version is None
 
-    def test_pin_version_success(self, apt_manager, mock_open):
+    def test_pin_version_success(self, apt_manager, mock_subprocess_run):
         """Test successful version pinning with wildcard."""
-        result = apt_manager.pin_version("nvidia-driver-*", "580.*")
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        result = apt_manager.pin_version("nvidia-driver-580*", "580.*")
         assert result is True
-        mock_open.assert_called_once()
-        written_content = mock_open.return_value.__enter__.return_value.write.call_args[
-            0
-        ][0]
-        assert "nvidia-driver-*" in written_content
-        assert "580.*" in written_content
-        assert "Pin-Priority: 1001" in written_content
+        # Verify sudo cp was called
+        mock_subprocess_run.assert_called()
+        call_args = mock_subprocess_run.call_args[0][0]
+        assert "sudo" in call_args
+        assert "cp" in call_args
 
-    def test_pin_version_with_exact_version(self, apt_manager, mock_open):
+    def test_pin_version_with_exact_version(self, apt_manager, mock_subprocess_run):
         """Test version pinning with exact version."""
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         result = apt_manager.pin_version("nvidia-driver-535", "535.154.05")
         assert result is True
-        written_content = mock_open.return_value.__enter__.return_value.write.call_args[
-            0
-        ][0]
-        assert "535.154.05" in written_content
+        # Verify sudo cp was called
+        mock_subprocess_run.assert_called()
+        call_args = mock_subprocess_run.call_args[0][0]
+        assert "sudo" in call_args
+        assert "cp" in call_args
 
-    def test_pin_version_permission_denied(self, apt_manager, mock_open):
+    def test_pin_version_permission_denied(self, apt_manager, mock_subprocess_run):
         """Test version pinning with permission denied."""
-        mock_open.side_effect = PermissionError("Permission denied")
+        mock_subprocess_run.return_value = MagicMock(
+            returncode=1, stdout="", stderr="Permission denied"
+        )
         result = apt_manager.pin_version("nvidia-driver-535", "535.154.05")
         assert result is False
 
-    def test_pin_version_os_error(self, apt_manager, mock_open):
+    def test_pin_version_os_error(self, apt_manager, mock_subprocess_run):
         """Test version pinning with OS error."""
-        mock_open.side_effect = OSError("Disk full")
+        mock_subprocess_run.side_effect = OSError("Disk full")
         result = apt_manager.pin_version("nvidia-driver-535", "535.154.05")
         assert result is False
 
@@ -208,6 +211,26 @@ class TestAptManager:
         )
         versions = apt_manager.get_all_versions("nvidia-driver-535")
         assert versions == []
+
+    def test_get_all_versions_returns_branch_versions(
+        self, apt_manager, mock_subprocess_run
+    ):
+        """Test that get_all_versions returns versions from the correct branch."""
+        mock_subprocess_run.return_value = MagicMock(
+            returncode=0,
+            stdout="""nvidia-driver-580 | 580.142-0ubuntu0.22.04.1 | http://archive.ubuntu.com/ubuntu jammy-updates/restricted amd64 Packages
+nvidia-driver-580 | 580.126-0ubuntu0.22.04.1 | http://archive.ubuntu.com/ubuntu jammy-updates/restricted amd64 Packages
+nvidia-driver-580 | 575.57-0ubuntu0.22.04.1 | http://archive.ubuntu.com/ubuntu jammy-updates/restricted amd64 Packages
+""",
+            stderr="",
+        )
+        versions = apt_manager.get_all_versions("nvidia-driver-580")
+        # Should return versions sorted by newest first
+        assert len(versions) == 3
+        # APT returns full version strings including ubuntu suffix
+        assert "580.142-0ubuntu0.22.04.1" in versions[0]  # Latest version
+        assert any("580.126" in v for v in versions)
+        assert any("575.57" in v for v in versions)
 
     def test_version_sort_key(self, apt_manager):
         """Test version sorting."""

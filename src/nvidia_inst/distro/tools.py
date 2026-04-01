@@ -319,3 +319,30 @@ def is_gui_tool(tool: str) -> bool:
         True if the tool is a GUI manager.
     """
     return tool in ("pamac", "dnfdragora")
+
+
+def detect_dnf_path() -> str:
+    """Detect the correct dnf executable path (dnf5 vs dnf).
+
+    Returns:
+        Path to dnf executable (dnf5 or dnf)
+    """
+    # Try dnf5 first if available
+    if shutil.which("dnf5"):
+        return "dnf5"
+
+    # Try dnf
+    if shutil.which("dnf"):
+        return "dnf"
+
+    # Default to dnf
+    return "dnf"
+
+
+def sudo_path() -> str:
+    """Get path to sudo.
+
+    Returns:
+        Path to sudo executable
+    """
+    return shutil.which("sudo") or "sudo"

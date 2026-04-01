@@ -1,5 +1,6 @@
 """APT package manager implementation for Debian/Ubuntu."""
 
+import os
 import subprocess
 
 from nvidia_inst.distro.package_manager import PackageManager, PackageManagerError
@@ -136,23 +137,52 @@ class AptManager(PackageManager):
         """Pin package to version using apt preferences.
 
         Args:
-            package: Package name (e.g., 'nvidia-driver-*').
+            package: Package name (e.g., 'nvidia-driver-580*', 'cuda-toolkit-12*').
             version: Version pattern. Use '580.*' to lock to 580 branch,
-                     'exact.version' for exact version.
+                     '12.*' to lock to CUDA 12.x, 'exact.version' for exact version.
 
         Returns:
             True if successful, False otherwise.
         """
-        pin_file = f"/etc/apt/preferences.d/{package}"
-        try:
-            content = f"""Package: {package}
+        import re
+        import tempfile
+
+        # Sanitize filename (remove * and special chars)
+        safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", package)
+        pin_file = f"/etc/apt/preferences.d/nvidia-inst-{safe_name}"
+
+        content = f"""# nvidia-inst: Pin {package} to {version}
+Package: {package}
 Pin: version {version}
 Pin-Priority: 1001
 """
-            with open(pin_file, "w") as f:
+
+        try:
+            # Write to temp file first
+            with tempfile.NamedTemporaryFile(
+                mode="w", delete=False, suffix=".pref"
+            ) as f:
                 f.write(content)
-            logger.info(f"Pinned {package} to pattern {version}")
-            return True
+                temp_path = f.name
+
+            # Copy to destination with sudo
+            result = subprocess.run(
+                ["sudo", "cp", temp_path, pin_file],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            # Clean up temp file
+            os.unlink(temp_path)
+
+            if result.returncode == 0:
+                logger.info(f"Pinned {package} to pattern {version} in {pin_file}")
+                return True
+            else:
+                logger.error(f"Failed to create pin file: {result.stderr}")
+                return False
+
         except PermissionError:
             logger.error(f"Permission denied to create {pin_file}")
             return False

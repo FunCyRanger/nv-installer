@@ -157,15 +157,30 @@ class TestPacmanManager:
         version = pacman_manager.get_available_version("nvidia-driver")
         assert version is None
 
-    def test_pin_version_not_supported(self, pacman_manager):
-        """Test version pinning returns False (not supported)."""
-        result = pacman_manager.pin_version("nvidia", "535.154.05")
-        assert result is False
+    def test_pin_version_returns_true(self, pacman_manager):
+        """Test version pinning returns True (Arch uses branch packages)."""
+        result = pacman_manager.pin_version("nvidia-580xx-dkms", "580.*")
+        assert result is True
 
     def test_pin_version_default_star(self, pacman_manager):
         """Test version pinning with default * parameter."""
-        result = pacman_manager.pin_version("nvidia")
-        assert result is False
+        result = pacman_manager.pin_version("nvidia-580xx-dkms")
+        assert result is True
+
+    def test_get_branch_package_580(self, pacman_manager):
+        """Test getting branch package for 580 branch."""
+        result = pacman_manager.get_branch_package("580")
+        assert result == "nvidia-580xx-dkms"
+
+    def test_get_branch_package_470(self, pacman_manager):
+        """Test getting branch package for 470 branch."""
+        result = pacman_manager.get_branch_package("470")
+        assert result == "nvidia-470xx-dkms"
+
+    def test_get_branch_package_latest(self, pacman_manager):
+        """Test getting branch package for latest branch."""
+        result = pacman_manager.get_branch_package("590")
+        assert result == "nvidia-open"
 
     def test_package_exists_true(self, pacman_manager, mock_subprocess_run):
         """Test package exists check - true case."""
@@ -244,6 +259,19 @@ class TestPacmanManagerBranches:
 
         versions = pacman_manager.get_all_versions("nvidia-470xx")
         assert "nvidia-470xx" in versions
+
+    def test_get_all_versions_returns_branch_packages(
+        self, pacman_manager, mock_subprocess_run
+    ):
+        """Test that get_all_versions returns branch-specific packages."""
+        # Mock _package_exists to return True for all packages
+        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        versions = pacman_manager.get_all_versions("nvidia")
+        # Should return branch packages including legacy branches
+        assert len(versions) >= 2
+        assert "nvidia" in versions  # Latest (rolling)
+        assert "nvidia-470xx" in versions  # Legacy
 
 
 class TestPacmanManagerIntegration:
