@@ -43,7 +43,7 @@ def read_versionlock_toml() -> dict:
             logger.error("Failed to read versionlock.toml: sudo cat failed")
             return {"version": "1.0", "packages": []}
 
-        data = tomllib.loads(result.stdout)
+        data: dict = tomllib.loads(result.stdout)
         return data
     except Exception as e:
         logger.error(f"Failed to read versionlock.toml: {e}")
