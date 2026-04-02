@@ -157,6 +157,7 @@ class TestCLIIntegration:
             "nvidia_inst.gpu.detector.has_nvidia_gpu",
             lambda: False,
         )
+        monkeypatch.setattr("builtins.input", lambda _: "")
         from nvidia_inst.cli import install_driver_cli
 
         result = install_driver_cli()
