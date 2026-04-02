@@ -53,6 +53,7 @@ jobs:
   test:
     name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     strategy:
@@ -79,6 +80,7 @@ jobs:
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [lint, typecheck]
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
