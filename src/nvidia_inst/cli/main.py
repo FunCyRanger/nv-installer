@@ -16,10 +16,6 @@ from nvidia_inst.cli.driver_state import (
     detect_driver_state,
     show_driver_options,
 )
-from nvidia_inst.cli.dryrun import (
-    dry_run_change,
-    dry_run_nouveau_install,
-)
 from nvidia_inst.cli.installer import (
     get_packages_to_remove,
     prompt_reboot,
@@ -27,6 +23,10 @@ from nvidia_inst.cli.installer import (
     remove_packages,
 )
 from nvidia_inst.cli.parser import parse_args
+from nvidia_inst.cli.simulate import (
+    simulate_change,
+    simulate_nouveau_install,
+)
 from nvidia_inst.distro.detector import (
     DistroDetectionError,
     DistroInfo,
@@ -328,7 +328,7 @@ def execute_driver_change(
     distro: DistroInfo,
     gpu: GPUInfo,
     driver_range: DriverRange,
-    dry_run: bool = False,
+    simulate: bool = False,
     with_cuda: bool = True,
     cuda_version: str | None = None,
     skip_plan: bool = False,
@@ -344,15 +344,8 @@ def execute_driver_change(
         return 0
 
     if option.action == "revert_nouveau":
-        if dry_run:
-            dry_run_change(
-                state.message,
-                state.current_version,
-                packages,
-                distro,
-                with_cuda=with_cuda,
-                cuda_version=cuda_version,
-            )
+        if simulate:
+            simulate_nouveau_install(packages, distro.id)
             return 0
 
         if not require_root(interactive=True):
@@ -374,12 +367,12 @@ def execute_driver_change(
             distro.id, driver_range
         )
 
-        if dry_run:
-            dry_run_change(
+        if simulate:
+            simulate_change(
                 state.message,
                 state.current_version,
                 packages,
-                distro,
+                distro.id,
                 with_cuda=with_cuda,
                 cuda_version=cuda_version,
             )
@@ -440,44 +433,6 @@ def execute_driver_change(
             print("[WARNING] Initramfs rebuild may have failed")
 
         prompt_reboot()
-        return 0
-
-    if option.action == "switch_nouveau":
-        if dry_run:
-            dry_run_nouveau_install(packages, distro.id)
-            return 0
-
-        if not require_root(interactive=True):
-            print("\n[ERROR] Root privileges required to switch to Nouveau.")
-            return 1
-
-        print("\nSwitching to Nouveau driver...")
-        result = revert_to_nouveau(distro.id)
-        if result.success:
-            print(f"\n✓ {result.message}")
-            prompt_reboot()
-        else:
-            print(f"\n✗ Switch failed: {', '.join(result.errors)}")
-            return 1
-        return 0
-
-    if option.action == "install_nouveau":
-        if dry_run:
-            dry_run_nouveau_install(packages, distro.id)
-            return 0
-
-        if not require_root(interactive=True):
-            print("\n[ERROR] Root privileges required to install Nouveau.")
-            return 1
-
-        print("\nInstalling Nouveau driver...")
-        result = revert_to_nouveau(distro.id)
-        if result.success:
-            print(f"\n✓ {result.message}")
-            prompt_reboot()
-        else:
-            print(f"\n✗ Installation failed: {', '.join(result.errors)}")
-            return 1
         return 0
 
     print(f"\n[ERROR] Unknown action: {option.action}")
@@ -548,7 +503,7 @@ def install_driver_cli() -> int:
         distro,
         gpu,
         driver_range,
-        dry_run=args.dry_run,
+        simulate=args.simulate,
         with_cuda=not args.no_cuda,
         cuda_version=args.cuda_version,
     )

@@ -91,5 +91,5 @@ def check_root_required(operation: str = "this operation") -> int:
 
     print(f"\n[ERROR] Root privileges required for {operation}.")
     print("\nPlease run with: sudo nvidia-inst")
-    print("\nOr for dry-run (no changes): nvidia-inst --dry-run")
+    print("\nOr for simulation (no changes): nvidia-inst --simulate")
     return 1

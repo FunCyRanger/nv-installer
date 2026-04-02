@@ -1,17 +1,16 @@
-"""Tests for cli/dryrun.py module."""
+"""Tests for cli/simulate.py module."""
 
 from io import StringIO
 from unittest.mock import patch
 
-from nvidia_inst.cli.dryrun import (
-    dry_run_change,
-    dry_run_generic,
-    dry_run_nouveau_install,
-    dry_run_nvidia_open_install,
-    dry_run_revert,
+from nvidia_inst.cli.simulate import (
     get_initramfs_command,
+    simulate_change,
+    simulate_generic,
+    simulate_nouveau_install,
+    simulate_nvidia_open_install,
+    simulate_revert,
 )
-from nvidia_inst.distro.tools import PackageContext
 
 
 class TestGetInitramfsCommand:
@@ -43,13 +42,13 @@ class TestGetInitramfsCommand:
         assert cmd == ["update-initramfs", "-u"]
 
 
-class TestDryRunGeneric:
-    """Tests for dry_run_generic function."""
+class TestSimulateGeneric:
+    """Tests for simulate_generic function."""
 
     @patch("sys.stdout", new_callable=StringIO)
-    def test_dry_run_generic_output(self, mock_stdout):
-        """Test dry_run_generic outputs correctly."""
-        dry_run_generic(
+    def test_simulate_generic_output(self, mock_stdout):
+        """Test simulate_generic outputs correctly."""
+        simulate_generic(
             title="Test Title",
             state_message="Driver installed",
             current_version="535.154.05",
@@ -59,7 +58,7 @@ class TestDryRunGeneric:
         )
 
         output = mock_stdout.getvalue()
-        assert "DRY-RUN MODE - Test Title" in output
+        assert "SIMULATE MODE - Test Title" in output
         assert "Driver installed" in output
         assert "535.154.05" in output
         assert "nvidia-driver-535" in output
@@ -68,9 +67,9 @@ class TestDryRunGeneric:
         assert "2. step 2" in output
 
     @patch("sys.stdout", new_callable=StringIO)
-    def test_dry_run_generic_no_state(self, mock_stdout):
-        """Test dry_run_generic without state message."""
-        dry_run_generic(
+    def test_simulate_generic_no_state(self, mock_stdout):
+        """Test simulate_generic without state message."""
+        simulate_generic(
             title="Test Title",
             state_message=None,
             current_version=None,
@@ -83,22 +82,19 @@ class TestDryRunGeneric:
         assert "Current state" not in output
 
 
-class TestDryRunChange:
-    """Tests for dry_run_change function."""
+class TestSimulateChange:
+    """Tests for simulate_change function."""
 
     @patch("sys.stdout", new_callable=StringIO)
-    def test_dry_run_change_with_cuda(self, mock_stdout):
-        """Test dry_run_change with CUDA packages."""
-        ctx = PackageContext(
-            tool="apt", distro_id="ubuntu", distro_family="debian", version_id="22.04"
-        )
-
-        dry_run_change(
+    def test_simulate_change_ubuntu_with_cuda(self, mock_stdout):
+        """Test simulate_change with Ubuntu and CUDA packages."""
+        simulate_change(
             state_message="Driver installed",
             current_version="535.154.05",
             packages=["nvidia-driver-535"],
-            ctx=ctx,
-            cuda_pkgs=["cuda-toolkit"],
+            distro_id="ubuntu",
+            with_cuda=True,
+            cuda_version="12.2",
         )
 
         output = mock_stdout.getvalue()
@@ -106,21 +102,17 @@ class TestDryRunChange:
         assert "apt-get remove -y --purge" in output
         assert "apt-get update" in output
         assert "apt-get install -y nvidia-driver-535" in output
-        assert "apt-get install -y cuda-toolkit" in output
+        assert "cuda-toolkit-12.2" in output
 
     @patch("sys.stdout", new_callable=StringIO)
-    def test_dry_run_change_without_cuda(self, mock_stdout):
-        """Test dry_run_change without CUDA packages."""
-        ctx = PackageContext(
-            tool="dnf", distro_id="fedora", distro_family="fedora", version_id="39"
-        )
-
-        dry_run_change(
+    def test_simulate_change_fedora_without_cuda(self, mock_stdout):
+        """Test simulate_change with Fedora without CUDA packages."""
+        simulate_change(
             state_message="No driver",
             current_version=None,
             packages=["akmod-nvidia"],
-            ctx=ctx,
-            cuda_pkgs=None,
+            distro_id="fedora",
+            with_cuda=False,
         )
 
         output = mock_stdout.getvalue()
@@ -129,17 +121,13 @@ class TestDryRunChange:
         assert "cuda-toolkit" not in output
 
     @patch("sys.stdout", new_callable=StringIO)
-    def test_dry_run_change_pacman(self, mock_stdout):
-        """Test dry_run_change with pacman."""
-        ctx = PackageContext(
-            tool="pacman", distro_id="arch", distro_family="arch", version_id=""
-        )
-
-        dry_run_change(
+    def test_simulate_change_arch(self, mock_stdout):
+        """Test simulate_change with Arch."""
+        simulate_change(
             state_message="Driver installed",
             current_version="535.154.05",
             packages=["nvidia"],
-            ctx=ctx,
+            distro_id="arch",
         )
 
         output = mock_stdout.getvalue()
@@ -147,63 +135,69 @@ class TestDryRunChange:
         assert "pacman -Sy" in output
         assert "pacman -S --noconfirm nvidia" in output
 
-
-class TestDryRunNvidiaOpenInstall:
-    """Tests for dry_run_nvidia_open_install function."""
-
     @patch("sys.stdout", new_callable=StringIO)
-    def test_dry_run_nvidia_open_with_cuda(self, mock_stdout):
-        """Test dry_run_nvidia_open_install with CUDA."""
-        ctx = PackageContext(
-            tool="apt", distro_id="ubuntu", distro_family="debian", version_id="22.04"
+    def test_simulate_change_opensuse(self, mock_stdout):
+        """Test simulate_change with openSUSE."""
+        simulate_change(
+            state_message="Driver installed",
+            current_version="535.154.05",
+            packages=["x11-video-nvidiaG05"],
+            distro_id="opensuse",
+            with_cuda=False,
         )
 
-        dry_run_nvidia_open_install(
+        output = mock_stdout.getvalue()
+        assert "zypper remove -y" in output
+        assert "zypper refresh" in output
+        assert "zypper install -y x11-video-nvidiaG05" in output
+
+
+class TestSimulateNvidiaOpenInstall:
+    """Tests for simulate_nvidia_open_install function."""
+
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_simulate_nvidia_open_ubuntu_with_cuda(self, mock_stdout):
+        """Test simulate_nvidia_open_install with Ubuntu and CUDA."""
+        simulate_nvidia_open_install(
             state_message="Driver installed",
             current_version="535.154.05",
             packages=["nvidia-open"],
-            ctx=ctx,
-            cuda_pkgs=["cuda-toolkit"],
+            distro_id="ubuntu",
+            with_cuda=True,
+            cuda_version="12.2",
         )
 
         output = mock_stdout.getvalue()
         assert "NVIDIA Open Installation" in output
         assert "nvidia-open" in output
-        assert "cuda-toolkit" in output
+        assert "cuda-toolkit-12.2" in output
 
     @patch("sys.stdout", new_callable=StringIO)
-    def test_dry_run_nvidia_open_without_cuda(self, mock_stdout):
-        """Test dry_run_nvidia_open_install without CUDA."""
-        ctx = PackageContext(
-            tool="dnf", distro_id="fedora", distro_family="fedora", version_id="39"
-        )
-
-        dry_run_nvidia_open_install(
+    def test_simulate_nvidia_open_fedora_without_cuda(self, mock_stdout):
+        """Test simulate_nvidia_open_install with Fedora without CUDA."""
+        simulate_nvidia_open_install(
             state_message=None,
             current_version=None,
             packages=["nvidia-open"],
-            ctx=ctx,
-            cuda_pkgs=None,
+            distro_id="fedora",
+            with_cuda=False,
         )
 
         output = mock_stdout.getvalue()
         assert "NVIDIA Open Installation" in output
         assert "nvidia-open" in output
+        assert "cuda-toolkit" not in output
 
 
-class TestDryRunNouveauInstall:
-    """Tests for dry_run_nouveau_install function."""
+class TestSimulateNouveauInstall:
+    """Tests for simulate_nouveau_install function."""
 
     @patch("sys.stdout", new_callable=StringIO)
-    def test_dry_run_nouveau_install(self, mock_stdout):
-        """Test dry_run_nouveau_install."""
-        ctx = PackageContext(
-            tool="apt", distro_id="ubuntu", distro_family="debian", version_id="22.04"
-        )
-
-        dry_run_nouveau_install(
+    def test_simulate_nouveau_install_ubuntu(self, mock_stdout):
+        """Test simulate_nouveau_install with Ubuntu."""
+        simulate_nouveau_install(
             packages=["xserver-xorg-video-nouveau"],
-            ctx=ctx,
+            distro_id="ubuntu",
         )
 
         output = mock_stdout.getvalue()
@@ -211,20 +205,49 @@ class TestDryRunNouveauInstall:
         assert "xserver-xorg-video-nouveau" in output
         assert "apt-get remove -y --purge" in output
 
-
-class TestDryRunRevert:
-    """Tests for dry_run_revert function."""
-
     @patch("sys.stdout", new_callable=StringIO)
-    def test_dry_run_revert(self, mock_stdout):
-        """Test dry_run_revert."""
-        ctx = PackageContext(
-            tool="apt", distro_id="ubuntu", distro_family="debian", version_id="22.04"
+    def test_simulate_nouveau_install_fedora(self, mock_stdout):
+        """Test simulate_nouveau_install with Fedora."""
+        simulate_nouveau_install(
+            packages=["xorg-x11-drv-nouveau"],
+            distro_id="fedora",
         )
 
-        dry_run_revert(ctx=ctx)
+        output = mock_stdout.getvalue()
+        assert "Nouveau Installation" in output
+        assert "xorg-x11-drv-nouveau" in output
+        assert "dnf remove -y" in output
+
+
+class TestSimulateRevert:
+    """Tests for simulate_revert function."""
+
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_simulate_revert_ubuntu(self, mock_stdout):
+        """Test simulate_revert with Ubuntu."""
+        simulate_revert(distro_id="ubuntu")
 
         output = mock_stdout.getvalue()
         assert "Revert to Nouveau" in output
         assert "apt-get remove -y --purge" in output
+        assert "reboot" in output
+
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_simulate_revert_fedora(self, mock_stdout):
+        """Test simulate_revert with Fedora."""
+        simulate_revert(distro_id="fedora")
+
+        output = mock_stdout.getvalue()
+        assert "Revert to Nouveau" in output
+        assert "dnf remove -y" in output
+        assert "reboot" in output
+
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_simulate_revert_arch(self, mock_stdout):
+        """Test simulate_revert with Arch."""
+        simulate_revert(distro_id="arch")
+
+        output = mock_stdout.getvalue()
+        assert "Revert to Nouveau" in output
+        assert "pacman -Rns --noconfirm" in output
         assert "reboot" in output

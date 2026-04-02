@@ -56,15 +56,6 @@ from nvidia_inst.cli.driver_state import (
     show_driver_options,
 )
 
-# Re-export from dryrun
-from nvidia_inst.cli.dryrun import (
-    dry_run_change,
-    dry_run_generic,
-    dry_run_nouveau_install,
-    dry_run_nvidia_open_install,
-    dry_run_revert,
-)
-
 # Re-export from installer
 from nvidia_inst.cli.installer import (
     InstallResult,
@@ -86,6 +77,15 @@ from nvidia_inst.cli.main import (
     set_power_profile_cli,
 )
 from nvidia_inst.cli.parser import parse_args
+
+# Re-export from simulate
+from nvidia_inst.cli.simulate import (
+    simulate_change,
+    simulate_generic,
+    simulate_nouveau_install,
+    simulate_nvidia_open_install,
+    simulate_revert,
+)
 
 # Re-export from gpu.detector for tests
 from nvidia_inst.gpu.detector import has_nvidia_gpu
@@ -130,12 +130,12 @@ __all__ = [
     "format_install_command",
     "format_update_command",
     "format_remove_command",
-    # From dryrun
-    "dry_run_generic",
-    "dry_run_change",
-    "dry_run_nvidia_open_install",
-    "dry_run_nouveau_install",
-    "dry_run_revert",
+    # From simulate
+    "simulate_generic",
+    "simulate_change",
+    "simulate_nvidia_open_install",
+    "simulate_nouveau_install",
+    "simulate_revert",
     # From display
     "print_row",
     "print_section_header",

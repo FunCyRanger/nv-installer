@@ -206,7 +206,7 @@ def _build_optimal_options(
         DriverOption(
             len(options) + 1,
             "Nouveau (open-source, no CUDA)",
-            "switch_nouveau",
+            "revert_nouveau",
         )
     )
 
@@ -246,7 +246,7 @@ def _build_wrong_branch_options(
         DriverOption(
             len(options) + 1,
             "Nouveau (open-source, no CUDA)",
-            "switch_nouveau",
+            "revert_nouveau",
         )
     )
 
@@ -319,7 +319,7 @@ def _build_nvidia_open_options(
         DriverOption(
             len(options) + 1,
             "Nouveau (open-source, no CUDA)",
-            "switch_nouveau",
+            "revert_nouveau",
         )
     )
 
@@ -375,7 +375,7 @@ def _build_nothing_options(
         DriverOption(
             len(options) + 1,
             "Nouveau (open-source, no CUDA)",
-            "install_nouveau",
+            "revert_nouveau",
         )
     )
 

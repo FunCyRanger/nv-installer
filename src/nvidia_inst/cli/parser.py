@@ -36,11 +36,6 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--driver-version",
-        help="Specific driver version to install",
-    )
-
-    parser.add_argument(
         "--no-cuda",
         action="store_true",
         help="Install driver without CUDA",
@@ -49,12 +44,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cuda-version",
         help="Specific CUDA version to install",
-    )
-
-    parser.add_argument(
-        "--ignore-compatibility",
-        action="store_true",
-        help="Ignore CUDA/driver compatibility warnings",
     )
 
     parser.add_argument(
@@ -77,7 +66,6 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--dry-run",
         "--simulate",
         action="store_true",
         help="Show what would be installed without actually installing",

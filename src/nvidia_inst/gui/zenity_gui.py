@@ -242,7 +242,7 @@ CUDA: {driver_range.cuda_min}"""
     # Execute the selected option
     try:
         result = execute_driver_change(
-            selected_option, state, distro, gpu, driver_range, dry_run=False
+            selected_option, state, distro, gpu, driver_range, simulate=False
         )
 
         if result == 0:

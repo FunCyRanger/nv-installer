@@ -26,6 +26,7 @@ class GPUInfo:
 
 class GPUDetectionError(Exception):
     """Raised when GPU detection fails."""
+
     pass
 
 
@@ -96,7 +97,9 @@ def detect_gpu() -> GPUInfo | None:
         gpu = GPUInfo(
             model=parts[0],
             vram=parts[1] if len(parts) > 1 else None,
-            compute_capability=float(parts[2]) if len(parts) > 2 and parts[2] != "N/A" else None,
+            compute_capability=float(parts[2])
+            if len(parts) > 2 and parts[2] != "N/A"
+            else None,
             driver_version=parts[3] if len(parts) > 3 and parts[3] != "N/A" else None,
             cuda_version=parts[4] if len(parts) > 4 and parts[4] != "N/A" else None,
         )
@@ -107,13 +110,41 @@ def detect_gpu() -> GPUInfo | None:
         return gpu
 
     except subprocess.CalledProcessError as e:
-        logger.error(f"nvidia-smi failed: {e.stderr}")
-        return _detect_gpu_lspci()
+        # nvidia-smi might return non-zero even on success
+        # Check if we got useful output despite the error
+        if e.stdout and e.stdout.strip():
+            # We got output, so the command worked
+            output = e.stdout.strip()
+            parts = [p.strip() for p in output.split(",")]
+
+            gpu = GPUInfo(
+                model=parts[0],
+                vram=parts[1] if len(parts) > 1 else None,
+                compute_capability=float(parts[2])
+                if len(parts) > 2 and parts[2] != "N/A"
+                else None,
+                driver_version=parts[3]
+                if len(parts) > 3 and parts[3] != "N/A"
+                else None,
+                cuda_version=parts[4] if len(parts) > 4 and parts[4] != "N/A" else None,
+            )
+
+            gpu.generation = _get_gpu_generation(gpu.model)
+
+            if e.stderr:
+                logger.debug(f"nvidia-smi stderr (non-critical): {e.stderr}")
+
+            logger.info(f"Detected GPU: {gpu.model}")
+            return gpu
+        else:
+            logger.warning(f"nvidia-smi failed: {e.stderr}")
+            return _detect_gpu_lspci()
 
 
 def _nvidia_smi_available() -> bool:
     """Check if nvidia-smi is available."""
     import shutil
+
     return shutil.which("nvidia-smi") is not None
 
 
@@ -158,7 +189,9 @@ def _parse_lspci_gpu(line: str) -> str | None:
     if match:
         return match.group(1).strip()
 
-    match = re.search(r"(?:VGA compatible controller|NVIDIA)[:\s]+(.+)", line, re.IGNORECASE)
+    match = re.search(
+        r"(?:VGA compatible controller|NVIDIA)[:\s]+(.+)", line, re.IGNORECASE
+    )
     if match:
         return match.group(1).strip()
 

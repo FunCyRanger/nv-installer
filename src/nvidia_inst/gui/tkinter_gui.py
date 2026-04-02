@@ -348,7 +348,7 @@ class NvidiaInstGUI:
                 distro,
                 gpu,
                 driver_range,
-                dry_run=False,
+                simulate=False,
             )
             if result == 0:
                 messagebox.showinfo(

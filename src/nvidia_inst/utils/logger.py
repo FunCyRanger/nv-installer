@@ -9,12 +9,12 @@ LOG_DIR = Path("/var/log/nvidia-inst")
 LOG_FILE = LOG_DIR / "install.log"
 
 
-def setup_logging(debug: bool = False, dry_run: bool = False) -> None:
+def setup_logging(debug: bool = False, simulate: bool = False) -> None:
     """Configure logging for the application.
 
     Args:
         debug: Enable debug-level logging if True.
-        dry_run: Skip file logging if True (no root access).
+        simulate: Skip file logging if True (no root access).
     """
     level = logging.DEBUG if debug else logging.INFO
 
@@ -25,7 +25,7 @@ def setup_logging(debug: bool = False, dry_run: bool = False) -> None:
 
     handlers: list[logging.Handler] = [console_handler]
 
-    if not dry_run:
+    if not simulate:
         try:
             LOG_DIR.mkdir(parents=True, exist_ok=True)
             file_handler = RotatingFileHandler(
@@ -40,10 +40,7 @@ def setup_logging(debug: bool = False, dry_run: bool = False) -> None:
         except PermissionError:
             pass
 
-    logging.basicConfig(
-        level=level,
-        handlers=handlers
-    )
+    logging.basicConfig(level=level, handlers=handlers)
 
 
 def get_logger(name: str) -> logging.Logger:
