@@ -152,12 +152,16 @@ class TestCLIIntegration:
         monkeypatch,
     ):
         """Test install_driver_cli when no GPU detected."""
+        # Import the module to ensure it's loaded
+        import nvidia_inst.cli.main  # noqa: F401
+        import sys
+
+        # Get the actual module object
+        cli_main = sys.modules["nvidia_inst.cli.main"]
+
+        # Mock at the module level where it's actually used
+        monkeypatch.setattr(cli_main, "has_nvidia_gpu", lambda: False)
         monkeypatch.setattr("sys.argv", ["nvidia-inst"])
-        monkeypatch.setattr(
-            "nvidia_inst.gpu.detector.has_nvidia_gpu",
-            lambda: False,
-        )
-        monkeypatch.setattr("builtins.input", lambda _: "")
         from nvidia_inst.cli import install_driver_cli
 
         result = install_driver_cli()
@@ -174,7 +178,8 @@ class TestCLIIntegration:
     ):
         """Test install_driver_cli in dry-run mode."""
         monkeypatch.setattr("sys.argv", ["nvidia-inst", "--simulate"])
-        monkeypatch.setattr("builtins.input", lambda _: "")
+        # Return "1" for option selection, empty for confirmation prompts
+        monkeypatch.setattr("builtins.input", lambda _: "1")
         monkeypatch.setattr(
             "nvidia_inst.installer.driver.get_compatible_driver_packages",
             lambda *args: ["nvidia-driver-535"],

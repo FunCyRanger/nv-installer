@@ -79,10 +79,11 @@ class TestGetPackageFromMap:
         assert result == ["pkg-535"]
 
     def test_missing_format_arg(self):
-        """Test uses package name as-is when format arg missing."""
+        """Test skips templates with missing format args."""
         pkg_map = {"_default": ["pkg-{branch}"]}
         result = _get_package_from_map(pkg_map, "fedora")
-        assert result == ["pkg-{branch}"]
+        # Templates with unsubstituted placeholders are skipped
+        assert result == []
 
 
 class TestGetDriverPackages:

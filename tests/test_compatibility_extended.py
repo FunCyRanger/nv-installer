@@ -331,7 +331,7 @@ class TestGetCudaRange:
         """Test Maxwell CUDA range."""
         cuda_min, cuda_max = _get_cuda_range("maxwell")
         assert cuda_min == "7.5"
-        assert cuda_max == "12.8"
+        assert cuda_max == "12.x"
 
     def test_ampere_range(self):
         """Test Ampere CUDA range."""

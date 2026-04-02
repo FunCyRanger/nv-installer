@@ -271,8 +271,11 @@ def _get_package_from_map(
         try:
             result.append(pkg.format(**kwargs))
         except KeyError:
-            # Missing format argument, use as-is
-            result.append(pkg)
+            # Missing format argument - skip this template
+            # This prevents returning templates like "nvidia-driver-{branch}"
+            # when branch is not provided
+            logger.debug(f"Skipping template '{pkg}' due to missing format args")
+            continue
 
     return result
 

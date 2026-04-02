@@ -70,9 +70,10 @@ class TestGetCompatiblePackages:
             cuda_min="11.8",
             cuda_max="12.2",
             is_eol=False,
+            max_branch="535",  # Required for template substitution
         )
         packages = get_compatible_driver_packages("ubuntu", driver_range)
-        assert "nvidia-driver-535" in packages or "nvidia-driver-550" in packages
+        assert "nvidia-driver-535" in packages
 
     def test_ubuntu_eol_packages(self):
         """Test Ubuntu EOL driver packages."""
@@ -98,6 +99,7 @@ class TestGetCompatiblePackages:
             cuda_min="11.8",
             cuda_max="12.2",
             is_eol=False,
+            max_branch="535",  # Branch doesn't affect Fedora package names
         )
         packages = get_compatible_driver_packages("fedora", driver_range)
         assert "akmod-nvidia" in packages
@@ -113,6 +115,7 @@ class TestGetCompatiblePackages:
             cuda_min="11.8",
             cuda_max="12.2",
             is_eol=False,
+            max_branch="590",  # Modern Arch uses nvidia-open
         )
         packages = get_compatible_driver_packages("arch", driver_range)
         assert "nvidia-open" in packages
