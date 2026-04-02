@@ -115,12 +115,12 @@ def nothing_state():
     )
 
 
-class TestExecuteDriverChangeDryRun:
-    """Test execute_driver_change with dry_run=True for all actions."""
+class TestExecuteDriverChangeSimulate:
+    """Test execute_driver_change with simulate=True for all actions."""
 
     @patch("nvidia_inst.cli.main.get_compatible_driver_packages")
     @patch("sys.stdout", new_callable=StringIO)
-    def test_dry_run_upgrade_optimal(
+    def test_simulate_upgrade_optimal(
         self,
         mock_stdout,
         mock_packages,
@@ -129,7 +129,7 @@ class TestExecuteDriverChangeDryRun:
         mock_driver_range,
         optimal_state,
     ):
-        """Test dry-run for upgrade action in optimal state."""
+        """Test simulate for upgrade action in optimal state."""
         from nvidia_inst.cli.main import execute_driver_change
 
         option = optimal_state.options[0]  # upgrade
@@ -141,19 +141,19 @@ class TestExecuteDriverChangeDryRun:
             mock_distro,
             mock_gpu,
             mock_driver_range,
-            dry_run=True,
+            simulate=True,
             with_cuda=True,
             cuda_version="12.2",
         )
 
         assert result == 0
         output = mock_stdout.getvalue()
-        assert "DRY-RUN MODE - Driver Change" in output
+        assert "SIMULATE MODE - Driver Change" in output
         assert "nvidia-driver-535" in output
 
     @patch("nvidia_inst.cli.main.get_compatible_driver_packages")
     @patch("sys.stdout", new_callable=StringIO)
-    def test_dry_run_install_wrong_branch(
+    def test_simulate_install_wrong_branch(
         self,
         mock_stdout,
         mock_packages,
@@ -174,17 +174,17 @@ class TestExecuteDriverChangeDryRun:
             mock_distro,
             mock_gpu,
             mock_driver_range,
-            dry_run=True,
+            simulate=True,
             with_cuda=False,
         )
 
         assert result == 0
         output = mock_stdout.getvalue()
-        assert "DRY-RUN MODE - Driver Change" in output
+        assert "SIMULATE MODE - Driver Change" in output
 
     @patch("nvidia_inst.cli.main.get_compatible_driver_packages")
     @patch("sys.stdout", new_callable=StringIO)
-    def test_dry_run_install_nouveau(
+    def test_simulate_install_nouveau(
         self,
         mock_stdout,
         mock_packages,
@@ -205,17 +205,17 @@ class TestExecuteDriverChangeDryRun:
             mock_distro,
             mock_gpu,
             mock_driver_range,
-            dry_run=True,
+            simulate=True,
             with_cuda=True,
         )
 
         assert result == 0
         output = mock_stdout.getvalue()
-        assert "DRY-RUN MODE - Driver Change" in output
+        assert "SIMULATE MODE - Driver Change" in output
 
     @patch("nvidia_inst.cli.main.get_compatible_driver_packages")
     @patch("sys.stdout", new_callable=StringIO)
-    def test_dry_run_install_nothing(
+    def test_simulate_install_nothing(
         self,
         mock_stdout,
         mock_packages,
@@ -236,16 +236,16 @@ class TestExecuteDriverChangeDryRun:
             mock_distro,
             mock_gpu,
             mock_driver_range,
-            dry_run=True,
+            simulate=True,
             with_cuda=False,
         )
 
         assert result == 0
         output = mock_stdout.getvalue()
-        assert "DRY-RUN MODE - Driver Change" in output
+        assert "SIMULATE MODE - Driver Change" in output
 
     @patch("sys.stdout", new_callable=StringIO)
-    def test_dry_run_keep(
+    def test_simulate_keep(
         self, mock_stdout, mock_distro, mock_gpu, mock_driver_range, optimal_state
     ):
         """Test dry-run for keep action."""
@@ -259,7 +259,7 @@ class TestExecuteDriverChangeDryRun:
             mock_distro,
             mock_gpu,
             mock_driver_range,
-            dry_run=True,
+            simulate=True,
         )
 
         assert result == 0
@@ -267,7 +267,7 @@ class TestExecuteDriverChangeDryRun:
         assert "No changes made" in output
 
     @patch("sys.stdout", new_callable=StringIO)
-    def test_dry_run_cancel(
+    def test_simulate_cancel(
         self, mock_stdout, mock_distro, mock_gpu, mock_driver_range, nothing_state
     ):
         """Test dry-run for cancel action."""
@@ -281,7 +281,7 @@ class TestExecuteDriverChangeDryRun:
             mock_distro,
             mock_gpu,
             mock_driver_range,
-            dry_run=True,
+            simulate=True,
         )
 
         assert result == 0
@@ -289,7 +289,7 @@ class TestExecuteDriverChangeDryRun:
         assert "Cancelled" in output
 
     @patch("sys.stdout", new_callable=StringIO)
-    def test_dry_run_revert_nouveau(
+    def test_simulate_revert_nouveau(
         self, mock_stdout, mock_distro, mock_gpu, mock_driver_range, optimal_state
     ):
         """Test dry-run for revert_nouveau action."""
@@ -303,7 +303,7 @@ class TestExecuteDriverChangeDryRun:
             mock_distro,
             mock_gpu,
             mock_driver_range,
-            dry_run=True,
+            simulate=True,
         )
 
         assert result == 0
@@ -311,7 +311,7 @@ class TestExecuteDriverChangeDryRun:
         assert "Nouveau Installation" in output
 
     @patch("sys.stdout", new_callable=StringIO)
-    def test_dry_run_revert_nouveau_nothing_state(
+    def test_simulate_revert_nouveau_nothing_state(
         self, mock_stdout, mock_distro, mock_gpu, mock_driver_range, nothing_state
     ):
         """Test dry-run for revert_nouveau action in nothing state."""
@@ -325,7 +325,7 @@ class TestExecuteDriverChangeDryRun:
             mock_distro,
             mock_gpu,
             mock_driver_range,
-            dry_run=True,
+            simulate=True,
         )
 
         assert result == 0
@@ -333,7 +333,7 @@ class TestExecuteDriverChangeDryRun:
         assert "Nouveau Installation" in output
 
     @patch("sys.stdout", new_callable=StringIO)
-    def test_dry_run_unknown_action(
+    def test_simulate_unknown_action(
         self, mock_stdout, mock_distro, mock_gpu, mock_driver_range, optimal_state
     ):
         """Test dry-run for unknown action."""
@@ -347,7 +347,7 @@ class TestExecuteDriverChangeDryRun:
             mock_distro,
             mock_gpu,
             mock_driver_range,
-            dry_run=True,
+            simulate=True,
         )
 
         assert result == 1

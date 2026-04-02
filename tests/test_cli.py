@@ -17,7 +17,7 @@ class TestParseArgs:
         assert args.check is False
         assert args.yes is False
         assert args.debug is False
-        assert args.dry_run is False
+        assert args.simulate is False
 
     def test_gui_flag(self, monkeypatch):
         """Test --gui flag."""
@@ -50,16 +50,6 @@ class TestParseArgs:
 
         args = parse_args()
         assert args.check is True
-
-    def test_driver_version(self, monkeypatch):
-        """Test --driver-version flag."""
-        monkeypatch.setattr(
-            sys, "argv", ["nvidia-inst", "--driver-version", "535.154.05"]
-        )
-        from nvidia_inst.cli import parse_args
-
-        args = parse_args()
-        assert args.driver_version == "535.154.05"
 
     def test_no_cuda_flag(self, monkeypatch):
         """Test --no-cuda flag."""
@@ -109,21 +99,13 @@ class TestParseArgs:
         args = parse_args()
         assert args.version is True
 
-    def test_dry_run_flag(self, monkeypatch):
-        """Test --dry-run flag."""
-        monkeypatch.setattr(sys, "argv", ["nvidia-inst", "--dry-run"])
-        from nvidia_inst.cli import parse_args
-
-        args = parse_args()
-        assert args.dry_run is True
-
-    def test_simulate_alias(self, monkeypatch):
-        """Test --simulate alias for --dry-run."""
+    def test_simulate_flag(self, monkeypatch):
+        """Test --simulate flag."""
         monkeypatch.setattr(sys, "argv", ["nvidia-inst", "--simulate"])
         from nvidia_inst.cli import parse_args
 
         args = parse_args()
-        assert args.dry_run is True
+        assert args.simulate is True
 
     def test_revert_to_nouveau_flag(self, monkeypatch):
         """Test --revert-to-nouveau flag."""
@@ -136,14 +118,14 @@ class TestParseArgs:
     def test_combined_flags(self, monkeypatch):
         """Test multiple flags combined."""
         monkeypatch.setattr(
-            sys, "argv", ["nvidia-inst", "--check", "--debug", "--dry-run", "-y"]
+            sys, "argv", ["nvidia-inst", "--check", "--debug", "--simulate", "-y"]
         )
         from nvidia_inst.cli import parse_args
 
         args = parse_args()
         assert args.check is True
         assert args.debug is True
-        assert args.dry_run is True
+        assert args.simulate is True
         assert args.yes is True
 
 
@@ -190,7 +172,7 @@ class TestCLIIntegration:
         mock_secure_boot_disabled,
     ):
         """Test install_driver_cli in dry-run mode."""
-        monkeypatch.setattr("sys.argv", ["nvidia-inst", "--dry-run"])
+        monkeypatch.setattr("sys.argv", ["nvidia-inst", "--simulate"])
         monkeypatch.setattr("builtins.input", lambda _: "")
         monkeypatch.setattr(
             "nvidia_inst.installer.driver.get_compatible_driver_packages",
