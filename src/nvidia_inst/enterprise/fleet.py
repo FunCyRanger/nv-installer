@@ -103,7 +103,7 @@ class FleetManager:
             }
         ]
 
-        import yaml
+        import yaml  # type: ignore[import-untyped]
 
         playbook_yaml = yaml.dump(playbook, default_flow_style=False)
 
@@ -111,7 +111,7 @@ class FleetManager:
             Path(output_path).write_text(playbook_yaml)
             logger.info(f"Playbook saved to {output_path}")
 
-        return playbook_yaml
+        return str(playbook_yaml)
 
     def generate_ansible_inventory(
         self,

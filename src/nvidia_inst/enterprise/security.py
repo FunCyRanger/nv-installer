@@ -9,7 +9,7 @@ This module provides security features including:
 import hashlib
 import json
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -143,7 +143,7 @@ class PackageVerifier:
             for chunk in iter(lambda: f.read(4096), b""):
                 hash_func.update(chunk)
 
-        return hash_func.hexdigest()
+        return hash_func.hexdigest()  # type: ignore[no-any-return]
 
     def verify_checksum(
         self,
@@ -371,7 +371,7 @@ class SecureBootManager:
 
             import shutil
 
-            for file in backup_path.iterfile():
+            for file in backup_path.iterdir():
                 dest = self.mok_dir / file.name
                 shutil.copy2(file, dest)
                 logger.info(f"Restored {file.name} to {dest}")
@@ -447,7 +447,7 @@ class AuditLogger:
         Returns:
             List of audit log entries
         """
-        entries = []
+        entries: list[AuditLogEntry] = []
 
         try:
             if not self.log_file.exists():
