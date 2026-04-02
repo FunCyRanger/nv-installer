@@ -6,8 +6,6 @@ These tests do NOT run subprocess calls to avoid CI timeouts.
 
 import sys
 
-import pytest
-
 
 class TestParserAttributeValidation:
     """Test that parser creates expected attributes."""
