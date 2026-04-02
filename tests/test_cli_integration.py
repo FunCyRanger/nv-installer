@@ -622,6 +622,10 @@ class TestSetPowerProfileCli:
         output = mock_stdout.getvalue()
         assert "Failed to set power profile" in output
 
+
+class TestCheckModeWithGpu:
+    """Test --check mode with GPU present."""
+
     @patch("nvidia_inst.cli.main.parse_args")
     @patch("nvidia_inst.cli.main.has_nvidia_gpu")
     @patch("nvidia_inst.cli.main.detect_distro")
