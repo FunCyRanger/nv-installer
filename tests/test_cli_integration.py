@@ -628,9 +628,9 @@ class TestCheckModeWithGpu:
 
     @patch("nvidia_inst.cli.main.parse_args")
     @patch("nvidia_inst.cli.main.has_nvidia_gpu", return_value=True)
-    @patch("nvidia_inst.cli.main.detect_distro")
-    @patch("nvidia_inst.cli.main.detect_gpu")
-    @patch("nvidia_inst.cli.main.get_driver_range")
+    @patch("nvidia_inst.cli.compatibility.detect_distro")
+    @patch("nvidia_inst.cli.compatibility.detect_gpu")
+    @patch("nvidia_inst.cli.compatibility.get_driver_range")
     @patch("nvidia_inst.cli.compatibility.PrerequisitesChecker")
     @patch("nvidia_inst.cli.compatibility.print_compatibility_info")
     @patch("nvidia_inst.installer.validation.is_nvidia_working")
@@ -650,7 +650,7 @@ class TestCheckModeWithGpu:
         mock_args,
     ):
         """Test --check with working driver."""
-        from nvidia_inst.cli.main import check_compatibility
+        from nvidia_inst.cli.compatibility import check_compatibility
 
         mock_args.return_value = MagicMock()
         mock_distro.return_value = MagicMock(
@@ -681,9 +681,9 @@ class TestCheckModeWithGpu:
 
     @patch("nvidia_inst.cli.main.parse_args")
     @patch("nvidia_inst.cli.main.has_nvidia_gpu", return_value=True)
-    @patch("nvidia_inst.cli.main.detect_distro")
-    @patch("nvidia_inst.cli.main.detect_gpu")
-    @patch("nvidia_inst.cli.main.get_driver_range")
+    @patch("nvidia_inst.cli.compatibility.detect_distro")
+    @patch("nvidia_inst.cli.compatibility.detect_gpu")
+    @patch("nvidia_inst.cli.compatibility.get_driver_range")
     @patch("nvidia_inst.cli.compatibility.PrerequisitesChecker")
     @patch("nvidia_inst.cli.compatibility.print_compatibility_info")
     @patch("nvidia_inst.installer.validation.is_nvidia_working")
@@ -701,7 +701,7 @@ class TestCheckModeWithGpu:
         mock_args,
     ):
         """Test --check with no driver installed."""
-        from nvidia_inst.cli.main import check_compatibility
+        from nvidia_inst.cli.compatibility import check_compatibility
 
         mock_args.return_value = MagicMock()
         mock_distro.return_value = MagicMock(
