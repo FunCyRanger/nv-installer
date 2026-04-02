@@ -341,19 +341,19 @@ def _get_cuda_range(generation: str) -> tuple[str, str | None]:
     """Get CUDA version range for a GPU generation.
 
     Based on official NVIDIA CUDA Toolkit and Architecture Matrix:
-    - Kepler: CUDA 7.5 - 11.x (EOL, last CUDA 11.8)
-    - Maxwell/Pascal/Volta: CUDA 7.5-8.0 - 12.x (Limited, frozen at 12.x)
+    - Kepler: CUDA 7.5 - 11.8 (EOL, last CUDA 11.8)
+    - Maxwell/Pascal/Volta: CUDA 7.5-9.0 - 12.x (Limited, frozen at 12.x)
     - Turing+: Latest CUDA supported
     """
     cuda_versions = {
         "kepler": ("7.5", "11.8"),
-        "maxwell": ("7.5", "12.8"),
-        "pascal": ("8.0", "12.8"),
-        "volta": ("9.0", "12.8"),
+        "maxwell": ("7.5", "12.x"),
+        "pascal": ("8.0", "12.x"),
+        "volta": ("9.0", "12.x"),
         "turing": ("10.0", "12.8"),
         "ampere": ("11.0", "12.8"),
         "ada": ("11.8", "12.8"),
-        "blackwell": ("12.4", "13.0"),
+        "blackwell": ("12.4", "13.x"),
         "unknown": ("11.0", "12.8"),
     }
 
@@ -567,6 +567,41 @@ def get_driver_branch(generation: str) -> str:
         "blackwell": "590",
     }
     return branch_map.get(generation, "590")
+
+
+def get_preferred_branch(generation: str, prefer_production: bool = True) -> str:
+    """Get preferred driver branch for a GPU generation.
+
+    For Blackwell GPUs, this allows choosing between:
+    - 590: Production/New Feature branch (stable)
+    - 595: New Feature branch (latest features)
+
+    Args:
+        generation: GPU generation (e.g., "blackwell")
+        prefer_production: If True, prefer stable branches over new feature branches
+
+    Returns:
+        Preferred branch identifier
+    """
+    try:
+        manager = _get_matrix_manager()
+        gen_info = manager.get_generation_info(generation)
+        if gen_info and gen_info.branches:
+            # Blackwell has multiple branches - select based on preference
+            if generation == "blackwell" and len(gen_info.branches) > 1:
+                if prefer_production:
+                    # Prefer 590 (production/stable) over 595 (new feature)
+                    if "590" in gen_info.branches:
+                        return "590"
+                else:
+                    # Prefer latest feature branch
+                    return max(gen_info.branches)
+            return gen_info.branches[0]
+    except Exception:
+        pass
+
+    # Fallback
+    return get_driver_branch(generation)
 
 
 def format_driver_version(version: str) -> str:

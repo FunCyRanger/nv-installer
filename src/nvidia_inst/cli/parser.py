@@ -83,4 +83,49 @@ def parse_args() -> argparse.Namespace:
         help="Set hybrid graphics power profile",
     )
 
+    # Branch selection for Blackwell GPUs
+    parser.add_argument(
+        "--branch",
+        choices=["470", "580", "590", "595"],
+        help="Force specific driver branch (useful for Blackwell GPUs choosing between 590 and 595)",
+    )
+
+    # Rollback options
+    parser.add_argument(
+        "--rollback",
+        action="store_true",
+        help="Rollback to previous driver state",
+    )
+
+    parser.add_argument(
+        "--list-snapshots",
+        action="store_true",
+        help="List available system snapshots for rollback",
+    )
+
+    # Offline installation options
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Use offline package cache for installation",
+    )
+
+    parser.add_argument(
+        "--create-cache",
+        action="store_true",
+        help="Download and cache packages for offline installation",
+    )
+
+    parser.add_argument(
+        "--cache-dir",
+        default="/var/cache/nvidia-inst",
+        help="Directory for offline package cache (default: /var/cache/nvidia-inst)",
+    )
+
+    parser.add_argument(
+        "--verify-cache",
+        action="store_true",
+        help="Verify integrity of offline package cache",
+    )
+
     return parser.parse_args()

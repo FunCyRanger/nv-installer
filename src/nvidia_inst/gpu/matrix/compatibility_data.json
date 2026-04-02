@@ -130,7 +130,7 @@
       },
       "cuda": {
         "min": "9.0",
-        "max": "12.8",
+        "max": "12.x",
         "recommended": "12.2",
         "locked_major": "12",
         "is_locked": true
@@ -150,7 +150,7 @@
       },
       "cuda": {
         "min": "8.0",
-        "max": "12.8",
+        "max": "12.x",
         "recommended": "12.2",
         "locked_major": "12",
         "is_locked": true
@@ -170,7 +170,7 @@
       },
       "cuda": {
         "min": "7.5",
-        "max": "12.8",
+        "max": "12.x",
         "recommended": "12.2",
         "locked_major": "12",
         "is_locked": true

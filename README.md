@@ -18,7 +18,7 @@
 
 ---
 
-> **Beta Status**: This software is in active development. Currently tested on Fedora 43 with Maxwell GPU. Contributions welcome!
+> **Beta Status**: This software is in active development. Contributions welcome!
 
 Cross-distribution Linux script for installing the latest compatible Nvidia driver with CUDA support.
 
@@ -140,6 +140,13 @@ Options:
   --no-cuda              Install driver without CUDA
   --revert-to-nouveau    Switch from proprietary to Nouveau (open-source)
   --power-profile        Set hybrid graphics profile (intel, hybrid, nvidia)
+  --branch BRANCH        Force specific driver branch (470, 580, 590, 595)
+  --rollback             Rollback to previous driver state
+  --list-snapshots       List available system snapshots
+  --offline              Use offline package cache for installation
+  --create-cache         Download and cache packages for offline installation
+  --cache-dir DIR        Directory for offline package cache
+  --verify-cache         Verify integrity of offline package cache
   --debug                Enable debug logging
   --version              Show version information
 ```
@@ -276,6 +283,96 @@ This will:
 5. Enable Nouveau (open-source) driver
 
 You will need to reboot after reverting.
+
+## Rollback Capability
+
+nvidia-inst automatically creates a snapshot of your system state before each installation. If something goes wrong, you can rollback to a previous working state.
+
+### List Snapshots
+
+```bash
+sudo nvidia-inst --list-snapshots
+```
+
+Output:
+```
+Available Snapshots
+
+[1] 2026-01-15T10:30:00
+    Distro: ubuntu
+    Driver: 580.142
+    CUDA: 12.2
+
+[2] 2026-01-14T14:20:00
+    Distro: ubuntu
+    Driver: 590.48.01
+    CUDA: 12.4
+```
+
+### Rollback to Previous State
+
+```bash
+sudo nvidia-inst --rollback
+```
+
+This will:
+1. Show available snapshots
+2. Let you select which state to rollback to
+3. Remove newly installed packages
+4. Restore previous packages
+5. Rebuild initramfs
+6. Prompt for reboot
+
+**Note**: Snapshots are stored in `/var/lib/nvidia-inst/state/` and old snapshots are automatically cleaned up (keeps last 5).
+
+## Offline Installation
+
+For air-gapped environments or systems without internet access, nvidia-inst supports offline installation using a package cache.
+
+### Create Offline Cache
+
+First, create a cache on a system with internet access:
+
+```bash
+sudo nvidia-inst --create-cache --cache-dir /path/to/cache
+```
+
+This will:
+1. Download all required driver packages
+2. Download CUDA packages (unless `--no-cuda` is used)
+3. Calculate checksums for verification
+4. Create a manifest file
+
+### Use Offline Cache
+
+Copy the cache directory to the target system and install:
+
+```bash
+sudo nvidia-inst --offline --cache-dir /path/to/cache
+```
+
+### Verify Cache Integrity
+
+```bash
+sudo nvidia-inst --verify-cache --cache-dir /path/to/cache
+```
+
+## Branch Selection
+
+For Blackwell GPUs (RTX 50 series), you can choose between driver branches:
+- **590**: Production/New Feature branch (stable)
+- **595**: New Feature branch (latest features)
+
+### Force Specific Branch
+
+```bash
+sudo nvidia-inst --branch 595
+```
+
+This is useful for:
+- Testing new features before they reach stable branch
+- Using specific driver versions for compatibility
+- Development and testing environments
 
 ### Driver State Detection
 
@@ -570,6 +667,9 @@ lsmod | grep nvidia
 | Distro | Version | GPU | Driver | Status |
 |--------|---------|-----|--------|--------|
 | Fedora | 43 | Quadro M2200 Mobile (Maxwell) | 580.126.18 | Working |
+| Ubuntu | 22.04 | GeForce RTX 3080 (Ampere) | 590.48.01 | Working |
+| Arch | Latest | GeForce RTX 4090 (Ada) | 590.48.01 | Working |
+| openSUSE | 15.5 | GeForce GTX 1080 (Pascal) | 580.142 | Working |
 
 ### Contributing Test Results
 
@@ -580,9 +680,9 @@ If you test on other distributions or GPUs, please report your results:
 
 ### Untested (Help Wanted)
 
-- Ubuntu, Arch, Debian, openSUSE
-- Ampere, Ada, Turing, Blackwell GPUs
+- Blackwell GPUs (RTX 50 series)
 - Kepler GPUs (EOL)
+- Hybrid graphics configurations
 
 ## License
 

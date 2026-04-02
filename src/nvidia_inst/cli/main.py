@@ -5,6 +5,8 @@ specialized modules for specific functionality.
 """
 
 import subprocess
+from pathlib import Path
+from typing import Any
 
 # Import from specialized modules
 from nvidia_inst.cli.compatibility import (
@@ -50,6 +52,7 @@ from nvidia_inst.gui import launch_gui
 from nvidia_inst.installer.cuda import get_cuda_installer
 from nvidia_inst.installer.driver import (
     get_compatible_driver_packages,
+    get_nvidia_open_packages,
 )
 from nvidia_inst.installer.hybrid import (
     set_power_profile,
@@ -362,6 +365,147 @@ def execute_driver_change(
             return 1
         return 0
 
+    if option.action == "switch_nvidia_open":
+        packages = get_nvidia_open_packages(distro.id, driver_range)
+
+        if simulate:
+            simulate_change(
+                state.message,
+                state.current_version,
+                packages,
+                distro.id,
+                with_cuda=with_cuda,
+                cuda_version=cuda_version,
+            )
+            return 0
+
+        if not require_root(interactive=True):
+            print("\n[ERROR] Root privileges required to install drivers.")
+            return 1
+
+        # Auto-select CUDA if locked and not specified
+        if (
+            with_cuda
+            and cuda_version is None
+            and driver_range.cuda_is_locked
+            and driver_range.cuda_locked_major
+        ):
+            cuda_version = f"{driver_range.cuda_locked_major}.0"
+            print(
+                f"\n[INFO] CUDA locked to {driver_range.cuda_locked_major}.x for {gpu.generation}"
+            )
+
+        # Remove existing packages
+        if state.current_version:
+            print("\n--- Removing old driver packages ---")
+            packages_to_remove = get_packages_to_remove(distro.id)
+            removed = remove_packages(distro.id, packages_to_remove)
+            if removed:
+                print(f"Removed: {', '.join(removed)}")
+
+        # Install NVIDIA Open packages
+        print("\n--- Installing NVIDIA Open driver packages ---")
+        try:
+            install_cmd = get_package_manager()
+            install_cmd.install(packages)
+            print(f"[OK] Installed: {' '.join(packages)}")
+        except Exception as e:
+            print(f"[ERROR] Installation failed: {e}")
+            return 1
+
+        # Install CUDA if requested
+        if with_cuda:
+            print("\n--- Installing CUDA ---")
+            cuda_installer = get_cuda_installer(distro.id)
+            cuda_pkgs = cuda_installer.get_cuda_packages(cuda_version)
+            if cuda_pkgs:
+                try:
+                    install_cmd = get_package_manager()
+                    install_cmd.install(cuda_pkgs)
+                    print(f"[OK] Installed CUDA: {' '.join(cuda_pkgs)}")
+                except Exception as e:
+                    print(f"[ERROR] CUDA installation failed: {e}")
+
+        # Rebuild initramfs
+        print("\n--- Rebuilding initramfs ---")
+        if rebuild_initramfs(distro.id):
+            print("[OK] Initramfs rebuilt successfully")
+        else:
+            print("[WARNING] Initramfs rebuild may have failed")
+
+        prompt_reboot()
+        return 0
+
+    if option.action == "install_nvidia_open":
+        packages = get_nvidia_open_packages(distro.id, driver_range)
+
+        if simulate:
+            simulate_change(
+                state.message,
+                state.current_version,
+                packages,
+                distro.id,
+                with_cuda=with_cuda,
+                cuda_version=cuda_version,
+            )
+            return 0
+
+        if not require_root(interactive=True):
+            print("\n[ERROR] Root privileges required to install drivers.")
+            return 1
+
+        # Auto-select CUDA if locked and not specified
+        if (
+            with_cuda
+            and cuda_version is None
+            and driver_range.cuda_is_locked
+            and driver_range.cuda_locked_major
+        ):
+            cuda_version = f"{driver_range.cuda_locked_major}.0"
+            print(
+                f"\n[INFO] CUDA locked to {driver_range.cuda_locked_major}.x for {gpu.generation}"
+            )
+
+        # Remove existing packages (including Nouveau)
+        print("\n--- Removing old driver packages ---")
+        packages_to_remove = get_packages_to_remove(distro.id)
+        removed = remove_packages(distro.id, packages_to_remove)
+        if removed:
+            print(f"Removed: {', '.join(removed)}")
+
+        # Install NVIDIA Open packages
+        print("\n--- Installing NVIDIA Open driver packages ---")
+        try:
+            install_cmd = get_package_manager()
+            install_cmd.install(packages)
+            print(f"[OK] Installed: {' '.join(packages)}")
+        except Exception as e:
+            print(f"[ERROR] Installation failed: {e}")
+            return 1
+
+        # Install CUDA if requested
+        if with_cuda:
+            print("\n--- Installing CUDA ---")
+            cuda_installer = get_cuda_installer(distro.id)
+            cuda_pkgs = cuda_installer.get_cuda_packages(cuda_version)
+            if cuda_pkgs:
+                try:
+                    install_cmd = get_package_manager()
+                    install_cmd.install(cuda_pkgs)
+                    print(f"[OK] Installed CUDA: {' '.join(cuda_pkgs)}")
+                except Exception as e:
+                    print(f"[ERROR] CUDA installation failed: {e}")
+
+        # Rebuild initramfs
+        print("\n--- Rebuilding initramfs ---")
+        if rebuild_initramfs(distro.id):
+            print("[OK] Initramfs rebuilt successfully")
+        else:
+            print("[WARNING] Initramfs rebuild may have failed")
+
+        prompt_reboot()
+        return 0
+
     if option.action in ("install", "upgrade"):
         packages = state.suggested_packages or get_compatible_driver_packages(
             distro.id, driver_range
@@ -565,6 +709,171 @@ def revert_to_nouveau_cli() -> int:
         return 1
 
 
+def rollback_cli() -> int:
+    """Rollback to previous driver state."""
+    from nvidia_inst.installer.rollback import RollbackManager
+
+    print("\n" + "=" * 50)
+    print(" Rollback to Previous State")
+    print("=" * 50)
+
+    rollback_mgr = RollbackManager()
+    snapshots = rollback_mgr.list_snapshots()
+
+    if not snapshots:
+        print("\nNo snapshots available for rollback.")
+        print("Snapshots are created automatically before each installation.")
+        return 1
+
+    print(f"\nAvailable snapshots ({len(snapshots)}):")
+    for i, snapshot in enumerate(snapshots[:5], 1):
+        print(
+            f"  [{i}] {snapshot['timestamp']} - Driver: {snapshot.get('driver_version', 'N/A')}, CUDA: {snapshot.get('cuda_version', 'N/A')}"
+        )
+
+    if len(snapshots) > 5:
+        print(f"  ... and {len(snapshots) - 5} more")
+
+    try:
+        choice = int(input("\nSelect snapshot to rollback to [1]: ") or "1")
+        if choice < 1 or choice > len(snapshots):
+            print("Invalid selection.")
+            return 1
+    except ValueError:
+        print("Invalid input.")
+        return 1
+
+    selected = snapshots[choice - 1]
+
+    print(f"\nRolling back to snapshot from {selected['timestamp']}...")
+    print("  Driver version: " + selected.get("driver_version", "N/A"))
+    print("  CUDA version: " + selected.get("cuda_version", "N/A"))
+
+    response = input("\nProceed with rollback? [y/N]: ")
+    if response.lower() not in ("y", "yes"):
+        print("Cancelled.")
+        return 0
+
+    if not require_root(interactive=True):
+        print("\n[ERROR] Root privileges required.")
+        return 1
+
+    state_file = Path(selected["file"])
+    state = rollback_mgr._load_snapshot(state_file)
+
+    if state and rollback_mgr.rollback(state):
+        print("\n✓ Rollback completed successfully")
+        prompt_reboot()
+        return 0
+    else:
+        print("\n✗ Rollback failed")
+        return 1
+
+
+def list_snapshots_cli() -> int:
+    """List available system snapshots."""
+    from nvidia_inst.installer.rollback import RollbackManager
+
+    rollback_mgr = RollbackManager()
+    snapshots = rollback_mgr.list_snapshots()
+
+    if not snapshots:
+        print("\nNo snapshots available.")
+        return 0
+
+    print("\n" + "=" * 50)
+    print(" Available Snapshots")
+    print("=" * 50)
+
+    for i, snapshot in enumerate(snapshots, 1):
+        print(f"\n[{i}] {snapshot['timestamp']}")
+        print(f"    Distro: {snapshot['distro_id']}")
+        print(f"    Driver: {snapshot.get('driver_version', 'N/A')}")
+        print(f"    CUDA: {snapshot.get('cuda_version', 'N/A')}")
+
+    return 0
+
+
+def create_cache_cli(args: Any) -> int:
+    """Create offline package cache."""
+    from nvidia_inst.installer.offline import OfflineInstaller
+
+    print("\n" + "=" * 50)
+    print(" Creating Offline Package Cache")
+    print("=" * 50)
+
+    offline_installer = OfflineInstaller(cache_dir=args.cache_dir)
+
+    try:
+        distro = detect_distro()
+        driver_range = get_driver_range(detect_gpu())
+
+        # Get packages to cache
+        packages = get_compatible_driver_packages(distro.id, driver_range)
+
+        # Add CUDA packages if not disabled
+        if not args.no_cuda:
+            from nvidia_inst.installer.cuda import get_cuda_installer
+
+            cuda_installer = get_cuda_installer(distro.id)
+            cuda_pkgs = cuda_installer.get_cuda_packages(args.cuda_version)
+            packages.extend(cuda_pkgs)
+
+        print(f"\nDistribution: {distro}")
+        print(f"Packages to cache: {', '.join(packages)}")
+        print(f"Cache directory: {args.cache_dir}")
+
+        if not args.yes:
+            response = input("\nCreate offline cache? [y/N]: ")
+            if response.lower() not in ("y", "yes"):
+                print("Cancelled.")
+                return 0
+
+        print("\nDownloading packages...")
+        if offline_installer.create_cache(packages, distro.id):
+            info = offline_installer.get_cache_info()
+            print("\n✓ Cache created successfully")
+            print(f"  Packages: {info['package_count']}")
+            print(f"  Size: {info['total_size_mb']} MB")
+            print(f"  Location: {args.cache_dir}")
+            return 0
+        else:
+            print("\n✗ Failed to create cache")
+            return 1
+
+    except Exception as e:
+        print(f"\n[ERROR] {e}")
+        return 1
+
+
+def verify_cache_cli(args: Any) -> int:
+    """Verify offline package cache integrity."""
+    from nvidia_inst.installer.offline import OfflineInstaller
+
+    print("\n" + "=" * 50)
+    print(" Verifying Offline Cache")
+    print("=" * 50)
+
+    offline_installer = OfflineInstaller(cache_dir=args.cache_dir)
+
+    info = offline_installer.get_cache_info()
+    if not info.get("exists"):
+        print(f"\nNo cache found at {args.cache_dir}")
+        return 1
+
+    print(f"\nCache created: {info['created_at']}")
+    print(f"Package count: {info['package_count']}")
+    print(f"Total size: {info['total_size_mb']} MB")
+
+    print("\nVerifying integrity...")
+    if offline_installer.verify_cache_integrity():
+        print("\n✓ Cache integrity verified")
+        return 0
+    else:
+        print("\n✗ Cache integrity check failed")
+        return 1
+
+
 def set_power_profile_cli(profile: str) -> int:
     """Set hybrid graphics power profile."""
     try:
@@ -629,6 +938,23 @@ def main() -> int:
     # Power profile
     if args.power_profile:
         return set_power_profile_cli(args.power_profile)
+
+    # Rollback options
+    if args.rollback:
+        return rollback_cli()
+
+    if args.list_snapshots:
+        return list_snapshots_cli()
+
+    # Offline installation options
+    if args.create_cache:
+        return create_cache_cli(args)
+
+    if args.verify_cache:
+        return verify_cache_cli(args)
+
+    if args.offline:
+        return install_driver_cli(offline=True, cache_dir=args.cache_dir)
 
     # Default: install driver
     return install_driver_cli()

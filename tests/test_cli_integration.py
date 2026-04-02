@@ -354,6 +354,78 @@ class TestExecuteDriverChangeSimulate:
         output = mock_stdout.getvalue()
         assert "Unknown action" in output
 
+    @patch("nvidia_inst.cli.main.get_nvidia_open_packages")
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_simulate_switch_nvidia_open(
+        self,
+        mock_stdout,
+        mock_open_packages,
+        mock_distro,
+        mock_gpu,
+        mock_driver_range,
+        optimal_state,
+    ):
+        """Test simulate for switch_nvidia_open action."""
+        from nvidia_inst.cli.main import execute_driver_change
+
+        option = DriverOption(3, "NVIDIA Open", "switch_nvidia_open")
+        mock_open_packages.return_value = [
+            "nvidia-driver-590-open",
+            "nvidia-dkms-590-open",
+        ]
+
+        result = execute_driver_change(
+            option,
+            optimal_state,
+            mock_distro,
+            mock_gpu,
+            mock_driver_range,
+            simulate=True,
+            with_cuda=True,
+            cuda_version="12.2",
+        )
+
+        assert result == 0
+        output = mock_stdout.getvalue()
+        assert "SIMULATE MODE - Driver Change" in output
+        assert "nvidia-driver-590-open" in output
+
+    @patch("nvidia_inst.cli.main.get_nvidia_open_packages")
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_simulate_install_nvidia_open(
+        self,
+        mock_stdout,
+        mock_open_packages,
+        mock_distro,
+        mock_gpu,
+        mock_driver_range,
+        nouveau_state,
+    ):
+        """Test simulate for install_nvidia_open action."""
+        from nvidia_inst.cli.main import execute_driver_change
+
+        option = DriverOption(2, "NVIDIA Open", "install_nvidia_open")
+        mock_open_packages.return_value = [
+            "nvidia-driver-590-open",
+            "nvidia-dkms-590-open",
+        ]
+
+        result = execute_driver_change(
+            option,
+            nouveau_state,
+            mock_distro,
+            mock_gpu,
+            mock_driver_range,
+            simulate=True,
+            with_cuda=True,
+            cuda_version="12.2",
+        )
+
+        assert result == 0
+        output = mock_stdout.getvalue()
+        assert "SIMULATE MODE - Driver Change" in output
+        assert "nvidia-driver-590-open" in output
+
 
 class TestRevertToNouveauCli:
     """Test revert_to_nouveau_cli function."""

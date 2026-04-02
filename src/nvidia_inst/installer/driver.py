@@ -5,6 +5,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from nvidia_inst.distro.packages import (
+    get_driver_open_packages,
+    get_driver_packages,
+    get_nouveau_remove_packages,
+)
+from nvidia_inst.distro.tools import PackageContext
 from nvidia_inst.gpu.compatibility import DriverRange
 from nvidia_inst.utils.logger import get_logger
 
@@ -665,6 +671,34 @@ def _get_distro_id_from_installer(installer: DistroInstaller) -> str:
     return "ubuntu"  # Default
 
 
+def _get_distro_tool(distro_id: str) -> str:
+    """Get the package manager tool for a distribution.
+
+    Args:
+        distro_id: Distribution ID (e.g., 'ubuntu', 'fedora').
+
+    Returns:
+        Package manager tool name (e.g., 'apt', 'dnf', 'pacman').
+    """
+    apt_distros = ("ubuntu", "linuxmint", "pop", "debian")
+    dnf_distros = ("fedora", "rhel", "centos", "rocky", "alma")
+    pacman_distros = ("arch", "manjaro", "endeavouros")
+    zypper_distros = ("opensuse", "sles")
+
+    if distro_id in apt_distros:
+        return "apt"
+    elif distro_id in dnf_distros:
+        return "dnf"
+    elif distro_id in pacman_distros:
+        return "pacman"
+    elif distro_id in zypper_distros:
+        return "zypper"
+    else:
+        # Default to apt for unknown distros
+        logger.warning(f"Unknown distro {distro_id}, defaulting to apt")
+        return "apt"
+
+
 def get_compatible_driver_packages(
     distro_id: str,
     driver_range: DriverRange,
@@ -678,82 +712,58 @@ def get_compatible_driver_packages(
     Returns:
         List of package names.
     """
-    if distro_id in ("ubuntu", "linuxmint", "pop"):
-        return _get_ubuntu_packages(driver_range)
-    elif distro_id in ("fedora", "rhel", "centos"):
-        return _get_fedora_packages(driver_range)
-    elif distro_id in ("arch", "manjaro"):
-        return _get_arch_packages(driver_range)
-    elif distro_id in ("debian"):
-        return _get_debian_packages(driver_range)
-    elif distro_id in ("opensuse"):
-        return _get_opensuse_packages(driver_range)
+    tool = _get_distro_tool(distro_id)
+    branch = driver_range.max_branch
+    is_eol = driver_range.is_eol
 
-    return []
+    # Create a PackageContext for the template-based system
+    ctx = PackageContext(
+        tool=tool,
+        distro_id=distro_id,
+        distro_family=_get_distro_family(distro_id),
+        version_id="",  # Not needed for package selection
+    )
 
+    packages = get_driver_packages(ctx, branch=branch, is_eol=is_eol)
 
-def _get_ubuntu_packages(driver_range: DriverRange) -> list[str]:
-    """Get Ubuntu driver packages."""
-    if driver_range.is_eol and driver_range.max_version:
-        major = driver_range.max_version.split(".")[0]
-        return [f"nvidia-driver-{major}", f"nvidia-dkms-{major}"]
+    # If no packages found, try fallback
+    if not packages:
+        logger.warning(f"No packages found for {distro_id} branch {branch}")
+        # For Fedora, use generic packages
+        if tool == "dnf":
+            packages = [
+                "akmod-nvidia",
+                "xorg-x11-drv-nvidia",
+                "xorg-x11-drv-nvidia-cuda",
+            ]
 
-    if driver_range.max_branch:
-        branch = driver_range.max_branch
-        if branch == "580":
-            return ["nvidia-driver-580", "nvidia-dkms-580"]
-        elif branch == "590":
-            return ["nvidia-driver-535", "nvidia-dkms-535"]
-
-    return ["nvidia-driver-535", "nvidia-dkms-535"]
-
-
-def _get_fedora_packages(driver_range: DriverRange) -> list[str]:
-    """Get Fedora driver packages.
-
-    Note: Fedora uses base package names (akmod-nvidia, etc.) - the available
-    version is determined by what's in the repo. Branch locking is handled via
-    dnf versionlock after installation (shown in Step 4 of dry-run output).
-    """
-    packages = [
-        "akmod-nvidia",
-        "xorg-x11-drv-nvidia",
-        "xorg-x11-drv-nvidia-cuda",
-    ]
     return packages
 
 
-def _get_arch_packages(driver_range: DriverRange) -> list[str]:
-    """Get Arch Linux driver packages."""
-    if driver_range.is_eol:
-        return ["nvidia-470xx-dkms", "nvidia-470xx-utils"]
+def _get_distro_family(distro_id: str) -> str:
+    """Get the distro family for a distribution.
 
-    if driver_range.max_branch == "580":
-        return ["nvidia-580xx-dkms", "nvidia-580xx-utils"]
+    Args:
+        distro_id: Distribution ID (e.g., 'ubuntu', 'fedora').
 
-    if driver_range.max_branch == "590":
-        return ["nvidia-open", "nvidia-utils"]
+    Returns:
+        Distro family name (e.g., 'debian', 'redhat', 'arch').
+    """
+    debian_distros = ("ubuntu", "linuxmint", "pop", "debian")
+    redhat_distros = ("fedora", "rhel", "centos", "rocky", "alma")
+    arch_distros = ("arch", "manjaro", "endeavouros")
+    suse_distros = ("opensuse", "sles")
 
-    return ["nvidia-open", "nvidia-utils"]
-
-
-def _get_debian_packages(driver_range: DriverRange) -> list[str]:
-    """Get Debian driver packages."""
-    if driver_range.is_eol and driver_range.max_version:
-        version_parts = driver_range.max_version.split(".")
-        if len(version_parts) >= 2:
-            major = version_parts[0]
-            return [f"nvidia-driver-{major}"]
-
-    return ["nvidia-driver"]
-
-
-def _get_opensuse_packages(driver_range: DriverRange) -> list[str]:
-    """Get openSUSE driver packages."""
-    if driver_range.is_eol:
-        return ["x11-video-nvidiaG04"]
-
-    return ["x11-video-nvidiaG05", "nvidia-computeG05"]
+    if distro_id in debian_distros:
+        return "debian"
+    elif distro_id in redhat_distros:
+        return "redhat"
+    elif distro_id in arch_distros:
+        return "arch"
+    elif distro_id in suse_distros:
+        return "suse"
+    else:
+        return "unknown"
 
 
 def get_nvidia_open_packages(
@@ -769,59 +779,30 @@ def get_nvidia_open_packages(
     Returns:
         List of nvidia-open package names.
     """
-    if distro_id in ("ubuntu", "debian", "linuxmint", "pop"):
-        return _get_apt_nvidia_open_packages(driver_range)
-    elif distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
-        return _get_fedora_nvidia_open_packages()
-    elif distro_id in ("arch", "manjaro"):
-        return _get_arch_nvidia_open_packages()
-    elif distro_id in ("opensuse", "sles"):
-        return _get_opensuse_nvidia_open_packages()
+    tool = _get_distro_tool(distro_id)
+    branch = driver_range.max_branch
 
-    return []
+    # Create a PackageContext for the template-based system
+    ctx = PackageContext(
+        tool=tool,
+        distro_id=distro_id,
+        distro_family=_get_distro_family(distro_id),
+        version_id="",  # Not needed for package selection
+    )
 
+    packages = get_driver_open_packages(ctx, branch=branch)
 
-def _get_apt_nvidia_open_packages(driver_range: DriverRange) -> list[str]:
-    """Get APT-based NVIDIA Open packages (Ubuntu/Debian/Mint/Pop)."""
-    if driver_range.max_branch == "580":
-        return [
-            "nvidia-driver-550-open",
-            "nvidia-dkms-550-open",
-            "nvidia-settings",
-        ]
-    if driver_range.max_branch == "590":
-        return [
-            "nvidia-driver-535-open",
-            "nvidia-dkms-535-open",
-            "nvidia-settings",
-        ]
+    # If no packages found, try fallback
+    if not packages:
+        logger.warning(f"No open packages found for {distro_id} branch {branch}")
+        # For Fedora, use generic packages
+        if tool == "dnf":
+            packages = ["xorg-x11-drv-nvidia-open", "xorg-x11-drv-nvidia-open-cuda"]
+        # For Arch, use generic open packages
+        elif tool == "pacman":
+            packages = ["nvidia-open", "nvidia-utils"]
 
-    return [
-        "nvidia-driver-535-open",
-        "nvidia-dkms-535-open",
-        "nvidia-settings",
-    ]
-
-
-def _get_arch_nvidia_open_packages() -> list[str]:
-    """Get Arch Linux NVIDIA Open packages."""
-    return ["nvidia-open"]
-
-
-def _get_opensuse_nvidia_open_packages() -> list[str]:
-    """Get openSUSE NVIDIA Open packages."""
-    return [
-        "nvidia-open-driver-G06",
-        "nvidia-compute-G06",
-    ]
-
-
-def _get_fedora_nvidia_open_packages() -> list[str]:
-    """Get Fedora NVIDIA Open packages."""
-    return [
-        "xorg-x11-drv-nvidia-open",
-        "xorg-x11-drv-nvidia-open-cuda",
-    ]
+    return packages
 
 
 def get_nouveau_packages(distro_id: str) -> list[str]:
@@ -833,19 +814,14 @@ def get_nouveau_packages(distro_id: str) -> list[str]:
     Returns:
         List of nouveau package names.
     """
-    nouveau_pkg_map = {
-        "ubuntu": ["xserver-xorg-video-nouveau"],
-        "debian": ["xserver-xorg-video-nouveau"],
-        "linuxmint": ["xserver-xorg-video-nouveau"],
-        "pop": ["xserver-xorg-video-nouveau"],
-        "fedora": ["xorg-x11-drv-nouveau"],
-        "centos": ["xorg-x11-drv-nouveau"],
-        "rhel": ["xorg-x11-drv-nouveau"],
-        "rocky": ["xorg-x11-drv-nouveau"],
-        "alma": ["xorg-x11-drv-nouveau"],
-        "arch": ["xf86-video-nouveau"],
-        "manjaro": ["xf86-video-nouveau"],
-        "opensuse": ["xf86-video-nouveau"],
-        "sles": ["xf86-video-nouveau"],
-    }
-    return nouveau_pkg_map.get(distro_id, [])
+    tool = _get_distro_tool(distro_id)
+
+    # Create a PackageContext for the template-based system
+    ctx = PackageContext(
+        tool=tool,
+        distro_id=distro_id,
+        distro_family=_get_distro_family(distro_id),
+        version_id="",  # Not needed for package selection
+    )
+
+    return get_nouveau_remove_packages(ctx)

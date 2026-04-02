@@ -1,6 +1,5 @@
 """Tests for package name maps."""
 
-
 from nvidia_inst.distro.packages import (
     CUDA_MAJOR_PACKAGES,
     CUDA_PACKAGES,
@@ -219,3 +218,155 @@ class TestFormatPackageName:
         """Test returns name when no placeholder."""
         result = format_package_name("simple-package")
         assert result == "simple-package"
+
+
+class TestBranchSpecificPackages:
+    """Tests for branch-specific package mappings."""
+
+    def test_ubuntu_branch_470(self):
+        """Test Ubuntu branch 470 packages."""
+        ctx = PackageContext(
+            tool="apt", distro_id="ubuntu", distro_family="debian", version_id="22.04"
+        )
+        result = get_driver_packages(ctx, branch="470")
+        assert result == ["nvidia-driver-470", "nvidia-dkms-470"]
+
+    def test_ubuntu_branch_580(self):
+        """Test Ubuntu branch 580 packages."""
+        ctx = PackageContext(
+            tool="apt", distro_id="ubuntu", distro_family="debian", version_id="22.04"
+        )
+        result = get_driver_packages(ctx, branch="580")
+        assert result == ["nvidia-driver-580", "nvidia-dkms-580"]
+
+    def test_ubuntu_branch_590(self):
+        """Test Ubuntu branch 590 packages."""
+        ctx = PackageContext(
+            tool="apt", distro_id="ubuntu", distro_family="debian", version_id="22.04"
+        )
+        result = get_driver_packages(ctx, branch="590")
+        assert result == ["nvidia-driver-590", "nvidia-dkms-590"]
+
+    def test_arch_branch_470(self):
+        """Test Arch branch 470 packages."""
+        ctx = PackageContext(
+            tool="pacman", distro_id="arch", distro_family="arch", version_id=""
+        )
+        result = get_driver_packages(ctx, branch="470")
+        assert result == ["nvidia-470xx-dkms", "nvidia-470xx-utils"]
+
+    def test_arch_branch_580(self):
+        """Test Arch branch 580 packages."""
+        ctx = PackageContext(
+            tool="pacman", distro_id="arch", distro_family="arch", version_id=""
+        )
+        result = get_driver_packages(ctx, branch="580")
+        assert result == ["nvidia-580xx-dkms", "nvidia-580xx-utils"]
+
+    def test_arch_branch_590(self):
+        """Test Arch branch 590 packages."""
+        ctx = PackageContext(
+            tool="pacman", distro_id="arch", distro_family="arch", version_id=""
+        )
+        result = get_driver_packages(ctx, branch="590")
+        assert result == ["nvidia-open", "nvidia-utils"]
+
+    def test_debian_branch_470(self):
+        """Test Debian branch 470 packages."""
+        ctx = PackageContext(
+            tool="apt", distro_id="debian", distro_family="debian", version_id="12"
+        )
+        result = get_driver_packages(ctx, branch="470")
+        assert result == ["nvidia-driver-470", "nvidia-dkms-470"]
+
+    def test_debian_branch_580(self):
+        """Test Debian branch 580 packages."""
+        ctx = PackageContext(
+            tool="apt", distro_id="debian", distro_family="debian", version_id="12"
+        )
+        result = get_driver_packages(ctx, branch="580")
+        assert result == ["nvidia-driver-580", "nvidia-dkms-580"]
+
+    def test_debian_branch_590(self):
+        """Test Debian branch 590 packages."""
+        ctx = PackageContext(
+            tool="apt", distro_id="debian", distro_family="debian", version_id="12"
+        )
+        result = get_driver_packages(ctx, branch="590")
+        assert result == ["nvidia-driver-590", "nvidia-dkms-590"]
+
+    def test_opensuse_branch_470(self):
+        """Test openSUSE branch 470 packages."""
+        ctx = PackageContext(
+            tool="zypper", distro_id="opensuse", distro_family="suse", version_id="15.5"
+        )
+        result = get_driver_packages(ctx, branch="470")
+        assert result == ["x11-video-nvidiaG04", "nvidia-computeG04"]
+
+    def test_opensuse_branch_580(self):
+        """Test openSUSE branch 580 packages."""
+        ctx = PackageContext(
+            tool="zypper", distro_id="opensuse", distro_family="suse", version_id="15.5"
+        )
+        result = get_driver_packages(ctx, branch="580")
+        assert result == ["x11-video-nvidiaG05", "nvidia-computeG05"]
+
+    def test_opensuse_branch_590(self):
+        """Test openSUSE branch 590 packages."""
+        ctx = PackageContext(
+            tool="zypper", distro_id="opensuse", distro_family="suse", version_id="15.5"
+        )
+        result = get_driver_packages(ctx, branch="590")
+        assert result == ["x11-video-nvidiaG05", "nvidia-computeG05"]
+
+    def test_eol_ubuntu(self):
+        """Test EOL packages for Ubuntu."""
+        ctx = PackageContext(
+            tool="apt", distro_id="ubuntu", distro_family="debian", version_id="22.04"
+        )
+        result = get_driver_packages(ctx, branch="470", is_eol=True)
+        assert result == ["nvidia-driver-470", "nvidia-dkms-470"]
+
+    def test_eol_arch(self):
+        """Test EOL packages for Arch."""
+        ctx = PackageContext(
+            tool="pacman", distro_id="arch", distro_family="arch", version_id=""
+        )
+        result = get_driver_packages(ctx, branch="470", is_eol=True)
+        assert result == ["nvidia-470xx-dkms", "nvidia-470xx-utils"]
+
+
+class TestDriverOpenBranchPackages:
+    """Tests for open driver branch-specific packages."""
+
+    def test_ubuntu_open_branch_590(self):
+        """Test Ubuntu open driver branch 590 packages."""
+        ctx = PackageContext(
+            tool="apt", distro_id="ubuntu", distro_family="debian", version_id="22.04"
+        )
+        result = get_driver_open_packages(ctx, branch="590")
+        assert result == ["nvidia-driver-590-open", "nvidia-dkms-590-open"]
+
+    def test_ubuntu_open_branch_580(self):
+        """Test Ubuntu open driver branch 580 packages."""
+        ctx = PackageContext(
+            tool="apt", distro_id="ubuntu", distro_family="debian", version_id="22.04"
+        )
+        result = get_driver_open_packages(ctx, branch="580")
+        assert result == ["nvidia-driver-580-open", "nvidia-dkms-580-open"]
+
+    def test_fedora_open_packages(self):
+        """Test Fedora open driver packages."""
+        ctx = PackageContext(
+            tool="dnf", distro_id="fedora", distro_family="redhat", version_id="39"
+        )
+        result = get_driver_open_packages(ctx)
+        assert result == ["akmod-nvidia", "xorg-x11-drv-nvidia-open"]
+
+    def test_arch_open_packages(self):
+        """Test Arch open driver packages."""
+        ctx = PackageContext(
+            tool="pacman", distro_id="arch", distro_family="arch", version_id=""
+        )
+        result = get_driver_open_packages(ctx)
+        assert result == ["nvidia-open", "nvidia-utils"]
