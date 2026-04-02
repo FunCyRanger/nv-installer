@@ -1,11 +1,7 @@
 """Tests for rollback functionality."""
 
 import json
-import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from nvidia_inst.installer.rollback import RollbackManager, SystemState
 
@@ -43,7 +39,7 @@ class TestRollbackManager:
     def test_init_creates_state_dir(self, tmp_path):
         """Test initialization creates state directory."""
         state_dir = tmp_path / "state"
-        manager = RollbackManager(state_dir=str(state_dir))
+        RollbackManager(state_dir=str(state_dir))
         assert state_dir.exists()
 
     def test_list_snapshots_empty(self, tmp_path):

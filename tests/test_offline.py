@@ -1,11 +1,7 @@
 """Tests for offline installation functionality."""
 
 import json
-import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from nvidia_inst.installer.offline import (
     CachedPackage,
