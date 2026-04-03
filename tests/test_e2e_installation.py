@@ -59,7 +59,8 @@ class TestDNFVersionlock:
             comment="E2E test lock",
         )
         assert success is True
-        assert "Locked" in msg
+        # First run: "Locked", subsequent runs: "already locked"
+        assert "locked" in msg.lower()
 
         # Verify the file was created
         data = read_versionlock_toml()
