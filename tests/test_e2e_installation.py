@@ -32,6 +32,15 @@ def is_ubuntu_container():
     return False
 
 
+def is_arch_container():
+    """Check if running in an Arch container."""
+    if os.path.isfile("/etc/os-release"):
+        with open("/etc/os-release") as f:
+            content = f.read().lower()
+            return "arch" in content
+    return False
+
+
 def has_root():
     """Check if running as root."""
     return os.geteuid() == 0

@@ -43,6 +43,15 @@ def is_ubuntu_container() -> bool:
     return False
 
 
+def is_arch_container() -> bool:
+    """Check if running in an Arch container."""
+    if os.path.isfile("/etc/os-release"):
+        with open("/etc/os-release") as f:
+            content = f.read().lower()
+            return "arch" in content
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Helper: capture simulate output
 # ---------------------------------------------------------------------------
@@ -805,3 +814,36 @@ class TestRealDistroPackageCommands:
         assert " ".join(update_cmd) in output
         # No "Remove old packages" step when current_version is None
         assert "Remove old packages" not in output
+
+    @pytest.mark.skipif("not is_arch_container()")
+    def test_arch_real_commands(self):
+        """Test that Arch simulate output matches real pacman commands."""
+        dr = DriverRange(
+            min_version="520.56.06",
+            max_version=None,
+            cuda_min="11.0",
+            cuda_max="12.8",
+            max_branch="590",
+        )
+        gpu = GPUInfo(model="NVIDIA GeForce RTX 3080", generation="ampere")
+
+        output = _capture_simulate(
+            simulate_change,
+            state_message="Driver upgrade available",
+            current_version="535.154.05",
+            packages=["nvidia", "nvidia-utils"],
+            distro_id="arch",
+            with_cuda=True,
+            cuda_version="12.2",
+            driver_range=dr,
+            gpu=gpu,
+        )
+
+        # Verify commands match real pacman tool
+        install_cmd = get_install_command("pacman")
+        remove_cmd = get_remove_command("pacman")
+        update_cmd = get_update_command("pacman")
+
+        assert " ".join(install_cmd) in output
+        assert " ".join(remove_cmd) in output
+        assert " ".join(update_cmd) in output
