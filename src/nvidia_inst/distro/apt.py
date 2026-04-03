@@ -221,3 +221,8 @@ Pin-Priority: 1001
 
         nums = re.findall(r"\d+", version)
         return tuple(int(n) for n in nums[:3]) if nums else (0, 0, 0)
+
+    @property
+    def tool(self) -> str:
+        """Get the tool name."""
+        return "apt"

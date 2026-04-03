@@ -338,6 +338,10 @@ def execute_driver_change(
 ) -> int:
     """Execute the selected driver change."""
     packages: list[str] = []
+
+    # Get package manager once at the start
+    pkg_mgr = get_package_manager()
+
     if option.action == "keep":
         print("\nNo changes made.")
         return 0
@@ -400,15 +404,15 @@ def execute_driver_change(
         # Remove existing packages
         if state.current_version:
             print("\n--- Removing old driver packages ---")
-            packages_to_remove = get_packages_to_remove(distro.id)
-            removed = remove_packages(distro.id, packages_to_remove)
+            packages_to_remove = get_packages_to_remove(pkg_mgr.tool)
+            removed = remove_packages(pkg_mgr.tool, packages_to_remove)
             if removed:
                 print(f"Removed: {', '.join(removed)}")
 
         # Install NVIDIA Open packages
         print("\n--- Installing NVIDIA Open driver packages ---")
         try:
-            install_cmd = get_package_manager()
+            install_cmd = pkg_mgr
             install_cmd.install(packages)
             print(f"[OK] Installed: {' '.join(packages)}")
         except Exception as e:
@@ -430,7 +434,7 @@ def execute_driver_change(
 
         # Rebuild initramfs
         print("\n--- Rebuilding initramfs ---")
-        if rebuild_initramfs(distro.id):
+        if rebuild_initramfs(pkg_mgr.tool):
             print("[OK] Initramfs rebuilt successfully")
         else:
             print("[WARNING] Initramfs rebuild may have failed")
@@ -472,18 +476,17 @@ def execute_driver_change(
 
         # Remove existing packages (including Nouveau)
         print("\n--- Removing old driver packages ---")
-        packages_to_remove = get_packages_to_remove(distro.id)
-        removed = remove_packages(distro.id, packages_to_remove)
+        packages_to_remove = get_packages_to_remove(pkg_mgr.tool)
+        removed = remove_packages(pkg_mgr.tool, packages_to_remove)
         if removed:
             print(f"Removed: {', '.join(removed)}")
 
         # Set version locks BEFORE installation
         if driver_range.max_branch:
             print("\n--- Setting version locks ---")
-            pkg_manager = get_package_manager()
             lock_errors = []
             for pkg in packages:
-                if pkg_manager.pin_version(pkg, f"{driver_range.max_branch}.*"):
+                if pkg_mgr.pin_version(pkg, f"{driver_range.max_branch}.*"):
                     print(f"  Locked: {pkg} to {driver_range.max_branch}.x")
                 else:
                     lock_errors.append(pkg)
@@ -496,8 +499,7 @@ def execute_driver_change(
         # Install NVIDIA Open packages (constrained by version locks)
         print("\n--- Installing NVIDIA Open driver packages ---")
         try:
-            install_cmd = get_package_manager()
-            install_cmd.install(packages)
+            pkg_mgr.install(packages)
             print(f"[OK] Installed: {' '.join(packages)}")
         except Exception as e:
             print(f"[ERROR] Installation failed: {e}")
@@ -510,8 +512,7 @@ def execute_driver_change(
             cuda_pkgs = cuda_installer.get_cuda_packages(cuda_version)
             if cuda_pkgs:
                 try:
-                    install_cmd = get_package_manager()
-                    install_cmd.install(cuda_pkgs)
+                    pkg_mgr.install(cuda_pkgs)
                     print(f"[OK] Installed CUDA: {' '.join(cuda_pkgs)}")
 
                     # Lock CUDA packages if GPU has CUDA lock
@@ -522,7 +523,7 @@ def execute_driver_change(
                         if pin_cuda_to_major_version(
                             distro.id,
                             driver_range.cuda_locked_major,
-                            get_package_manager(),
+                            pkg_mgr,
                         ):
                             print(
                                 f"  Locked CUDA to {driver_range.cuda_locked_major}.x"
@@ -548,7 +549,7 @@ def execute_driver_change(
 
         # Rebuild initramfs
         print("\n--- Rebuilding initramfs ---")
-        if rebuild_initramfs(distro.id):
+        if rebuild_initramfs(pkg_mgr.tool):
             print("[OK] Initramfs rebuilt successfully")
         else:
             print("[WARNING] Initramfs rebuild may have failed")
@@ -593,18 +594,17 @@ def execute_driver_change(
         # Remove existing packages
         if state.current_version:
             print("\n--- Removing old driver packages ---")
-            packages_to_remove = get_packages_to_remove(distro.id)
-            removed = remove_packages(distro.id, packages_to_remove)
+            packages_to_remove = get_packages_to_remove(pkg_mgr.tool)
+            removed = remove_packages(pkg_mgr.tool, packages_to_remove)
             if removed:
                 print(f"Removed: {', '.join(removed)}")
 
         # Set version locks BEFORE installation
         if driver_range.max_branch:
             print("\n--- Setting version locks ---")
-            pkg_manager = get_package_manager()
             lock_errors = []
             for pkg in packages:
-                if pkg_manager.pin_version(pkg, f"{driver_range.max_branch}.*"):
+                if pkg_mgr.pin_version(pkg, f"{driver_range.max_branch}.*"):
                     print(f"  Locked: {pkg} to {driver_range.max_branch}.x")
                 else:
                     lock_errors.append(pkg)
@@ -617,8 +617,7 @@ def execute_driver_change(
         # Install new packages (constrained by version locks)
         print("\n--- Installing driver packages ---")
         try:
-            install_cmd = get_package_manager()
-            install_cmd.install(packages)
+            pkg_mgr.install(packages)
             print(f"[OK] Installed: {' '.join(packages)}")
         except Exception as e:
             print(f"[ERROR] Installation failed: {e}")
@@ -631,8 +630,7 @@ def execute_driver_change(
             cuda_pkgs = cuda_installer.get_cuda_packages(cuda_version)
             if cuda_pkgs:
                 try:
-                    install_cmd = get_package_manager()
-                    install_cmd.install(cuda_pkgs)
+                    pkg_mgr.install(cuda_pkgs)
                     print(f"[OK] Installed CUDA: {' '.join(cuda_pkgs)}")
 
                     # Lock CUDA packages if GPU has CUDA lock
@@ -643,7 +641,7 @@ def execute_driver_change(
                         if pin_cuda_to_major_version(
                             distro.id,
                             driver_range.cuda_locked_major,
-                            get_package_manager(),
+                            pkg_mgr,
                         ):
                             print(
                                 f"  Locked CUDA to {driver_range.cuda_locked_major}.x"
@@ -669,7 +667,7 @@ def execute_driver_change(
 
         # Rebuild initramfs
         print("\n--- Rebuilding initramfs ---")
-        if rebuild_initramfs(distro.id):
+        if rebuild_initramfs(pkg_mgr.tool):
             print("[OK] Initramfs rebuilt successfully")
         else:
             print("[WARNING] Initramfs rebuild may have failed")

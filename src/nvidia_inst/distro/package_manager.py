@@ -10,6 +10,7 @@ logger = get_logger(__name__)
 
 class PackageManagerError(Exception):
     """Raised when package manager operation fails."""
+
     pass
 
 
@@ -135,5 +136,15 @@ class PackageManager(ABC):
 
         Returns:
             List of all available version strings.
+        """
+        ...
+
+    @property
+    @abstractmethod
+    def tool(self) -> str:
+        """Get the package manager tool name.
+
+        Returns:
+            Tool name: apt, dnf, dnf4, dnf5, pacman, zypper, etc.
         """
         ...

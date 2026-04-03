@@ -299,3 +299,36 @@ class TestDisableNouveau:
 
         call_args = mock_run.call_args[0][0]
         assert "update-initramfs" in call_args
+
+
+class TestPackagesToRemoveToolName:
+    """Regression tests for tool name vs distro ID issue.
+
+    These tests verify that get_packages_to_remove expects tool names
+    (apt, dnf, pacman, zypper) not distro IDs (ubuntu, fedora, arch).
+    """
+
+    def test_tool_names_work_with_get_packages_to_remove(self):
+        """Test that tool names work correctly."""
+        from nvidia_inst.cli.installer import get_packages_to_remove
+
+        # These should return non-empty lists
+        assert len(get_packages_to_remove("apt")) > 0
+        assert len(get_packages_to_remove("dnf")) > 0
+        assert len(get_packages_to_remove("pacman")) > 0
+        assert len(get_packages_to_remove("zypper")) > 0
+
+    def test_distro_ids_return_empty_with_get_packages_to_remove(self):
+        """Test that distro IDs return empty lists.
+
+        This documents expected behavior: get_packages_to_remove expects
+        tool names, not distro IDs.
+        """
+        from nvidia_inst.cli.installer import get_packages_to_remove
+
+        # Distro IDs should NOT work - they should return empty lists
+        assert get_packages_to_remove("fedora") == []
+        assert get_packages_to_remove("ubuntu") == []
+        assert get_packages_to_remove("arch") == []
+        assert get_packages_to_remove("debian") == []
+        assert get_packages_to_remove("opensuse") == []

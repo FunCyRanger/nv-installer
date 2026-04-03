@@ -210,3 +210,8 @@ class PacmanManager(PackageManager):
             return result.returncode == 0
         except subprocess.CalledProcessError:
             return False
+
+    @property
+    def tool(self) -> str:
+        """Get the tool name."""
+        return "pacman"
