@@ -71,7 +71,7 @@ jobs:
       
       - name: Install Python (Fedora)
         if: contains(matrix.distro, 'fedora')
-        run: dnf install -y python3 python3-pip pciutils kmod
+        run: dnf install -y python3 python3-pip pciutils kmod openssl
       
       - name: Install Python (Arch)
         if: contains(matrix.distro, 'arch')
