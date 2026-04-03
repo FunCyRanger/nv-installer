@@ -74,9 +74,9 @@ Based on official NVIDIA CUDA Toolkit and Architecture Matrix:
 | Maxwell | 7.5 - 12.8 | `12.*` | Major (Limited) | CUDA 12.x |
 | Pascal | 8.0 - 12.8 | `12.*` | Major (Limited) | CUDA 12.x |
 | Volta | 9.0 - 12.8 | `12.*` | Major (Limited) | CUDA 12.x |
-| Turing | 10.0 - 12.8 | None | N/A | Ongoing |
-| Ampere | 11.0 - 12.8 | None | N/A | Ongoing |
-| Ada Lovelace | 11.8 - 12.8 | None | N/A | Ongoing |
+| Turing | 10.0 - 13.x | None | N/A | Ongoing |
+| Ampere | 11.0 - 13.x | None | N/A | Ongoing |
+| Ada Lovelace | 11.8 - 13.x | None | N/A | Ongoing |
 | Blackwell | 12.4 - 13.x | None | N/A | Ongoing |
 
 **Notes:**

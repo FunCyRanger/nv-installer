@@ -26,9 +26,9 @@ This matrix combines GPU generation, compute capability, driver branches, and CU
 | **Maxwell** | 5.0-5.2 | GTX 9xx, M-series, Quadro M | 580.x | 7.5 | 12.8 | Limited (580 branch) |
 | **Pascal** | 6.0-6.1 | GTX 10xx, P100 | 580.x | 8.0 | 12.8 | Limited (580 branch) |
 | **Volta** | 7.0 | V100, Titan V | 580.x | 9.0 | 12.8 | Limited (580 branch) |
-| **Turing** | 7.5 | RTX 20xx, GTX 16xx, T4 | 590.x | 10.0 | 12.8 | Full (latest drivers) |
-| **Ampere** | 8.0-8.6 | RTX 30xx, A100, A30 | 590.x | 11.0 | 12.8 | Full (latest drivers) |
-| **Ada Lovelace** | 8.9 | RTX 40xx, L40, L10 | 590.x | 11.8 | 12.8 | Full (latest drivers) |
+| **Turing** | 7.5 | RTX 20xx, GTX 16xx, T4 | 590.x | 10.0 | 13.x | Full (latest drivers) |
+| **Ampere** | 8.0-8.6 | RTX 30xx, A100, A30 | 590.x | 11.0 | 13.x | Full (latest drivers) |
+| **Ada Lovelace** | 8.9 | RTX 40xx, L40, L10 | 590.x | 11.8 | 13.x | Full (latest drivers) |
 | **Blackwell** | 9.0 | RTX 50xx, GB200 | 590.x | 12.4 | 13.x | Full (latest drivers) |
 
 ### Driver Branch Details
@@ -44,9 +44,9 @@ This matrix combines GPU generation, compute capability, driver branches, and CU
 | GPU Generation | Recommended CUDA | Notes |
 |---------------|------------------|-------|
 | Blackwell | 12.6 | Latest features, optimal performance |
-| Ada Lovelace | 12.2 | Good balance of features and stability |
-| Ampere | 12.2 | Widely supported |
-| Turing | 12.2 | Stable compatibility |
+| Ada Lovelace | 12.6 | CUDA 13.x supported |
+| Ampere | 12.6 | CUDA 13.x supported |
+| Turing | 12.6 | CUDA 13.x supported |
 | Volta | 11.8 | Last fully supported version |
 | Pascal | 11.8 | Last fully supported version |
 | Maxwell | 11.8 | Last fully supported version |

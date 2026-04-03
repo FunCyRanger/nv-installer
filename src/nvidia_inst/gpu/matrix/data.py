@@ -127,8 +127,8 @@ GPU_GENERATIONS: dict[str, GPUGenerationInfo] = {
         compute_cap=ComputeCapability(min=8.9, max=8.9),
         cuda=CUDARange(
             min_version="11.8",
-            max_version="12.8",
-            recommended="12.2",
+            max_version="13.x",
+            recommended="12.6",
             locked_major=None,
             is_locked=False,
         ),
@@ -143,8 +143,8 @@ GPU_GENERATIONS: dict[str, GPUGenerationInfo] = {
         compute_cap=ComputeCapability(min=8.0, max=8.6),
         cuda=CUDARange(
             min_version="11.0",
-            max_version="12.8",
-            recommended="12.2",
+            max_version="13.x",
+            recommended="12.6",
             locked_major=None,
             is_locked=False,
         ),
@@ -159,8 +159,8 @@ GPU_GENERATIONS: dict[str, GPUGenerationInfo] = {
         compute_cap=ComputeCapability(min=7.5, max=7.5),
         cuda=CUDARange(
             min_version="10.0",
-            max_version="12.8",
-            recommended="12.2",
+            max_version="13.x",
+            recommended="12.6",
             locked_major=None,
             is_locked=False,
         ),

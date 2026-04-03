@@ -83,9 +83,9 @@ nvidia-inst uses a versioned compatibility matrix to determine the correct drive
 | GPU Generation | Min CUDA | Max CUDA | Recommended |
 |---------------|----------|----------|-------------|
 | Blackwell | 12.4 | 13.x | 12.6 |
-| Ada Lovelace | 11.8 | 12.8 | 12.2 |
-| Ampere | 11.0 | 12.8 | 12.2 |
-| Turing | 10.0 | 12.8 | 12.2 |
+| Ada Lovelace | 11.8 | 13.x | 12.6 |
+| Ampere | 11.0 | 13.x | 12.6 |
+| Turing | 10.0 | 13.x | 12.6 |
 | Volta | 9.0 | 12.8 | 11.8 |
 | Pascal | 8.0 | 12.8 | 11.8 |
 | Maxwell | 7.5 | 12.8 | 11.8 |

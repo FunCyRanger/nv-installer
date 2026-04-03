@@ -350,11 +350,11 @@ def _get_cuda_range(generation: str) -> tuple[str, str | None]:
         "maxwell": ("7.5", "12.x"),
         "pascal": ("8.0", "12.x"),
         "volta": ("9.0", "12.x"),
-        "turing": ("10.0", "12.8"),
-        "ampere": ("11.0", "12.8"),
-        "ada": ("11.8", "12.8"),
+        "turing": ("10.0", "13.x"),
+        "ampere": ("11.0", "13.x"),
+        "ada": ("11.8", "13.x"),
         "blackwell": ("12.4", "13.x"),
-        "unknown": ("11.0", "12.8"),
+        "unknown": ("11.0", "13.x"),
     }
 
     return cuda_versions.get(generation, ("11.0", "12.8"))

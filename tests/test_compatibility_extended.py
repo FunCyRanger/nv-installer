@@ -337,13 +337,13 @@ class TestGetCudaRange:
         """Test Ampere CUDA range."""
         cuda_min, cuda_max = _get_cuda_range("ampere")
         assert cuda_min == "11.0"
-        assert cuda_max == "12.8"
+        assert cuda_max == "13.x"
 
     def test_unknown_range(self):
         """Test unknown generation CUDA range."""
         cuda_min, cuda_max = _get_cuda_range("unknown")
         assert cuda_min == "11.0"
-        assert cuda_max == "12.8"
+        assert cuda_max == "13.x"
 
 
 class TestGetBranchMaxMinor:
