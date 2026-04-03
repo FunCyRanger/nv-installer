@@ -18,7 +18,7 @@ class TestGPUDetection:
     def test_detect_gpu_rtx_3080(self, mock_run):
         """Test detection of RTX 3080."""
         mock_run.return_value = MagicMock(
-            stdout="NVIDIA GeForce RTX 3080, 10.0 GB, 8.6, 535.154.05, 12.2\n",
+            stdout="NVIDIA GeForce RTX 3080, 10.0 GB, 8.6, 535.154.05\n",
             returncode=0,
         )
 
@@ -29,13 +29,12 @@ class TestGPUDetection:
         assert "RTX 3080" in gpu.model
         assert gpu.compute_capability == 8.6
         assert gpu.driver_version == "535.154.05"
-        assert gpu.cuda_version == "12.2"
 
     @patch("subprocess.run")
     def test_detect_gpu_rtx_4090(self, mock_run):
         """Test detection of RTX 4090."""
         mock_run.return_value = MagicMock(
-            stdout="NVIDIA GeForce RTX 4090, 24.0 GB, 8.9, 550.40, 12.3\n",
+            stdout="NVIDIA GeForce RTX 4090, 24.0 GB, 8.9, 550.40\n",
             returncode=0,
         )
 
@@ -50,7 +49,7 @@ class TestGPUDetection:
     def test_detect_gpu_gtx_1080(self, mock_run):
         """Test detection of GTX 1080 (Pascal)."""
         mock_run.return_value = MagicMock(
-            stdout="NVIDIA GeForce GTX 1080, 8.0 GB, 6.1, 525.147.05, 11.8\n",
+            stdout="NVIDIA GeForce GTX 1080, 8.0 GB, 6.1, 525.147.05\n",
             returncode=0,
         )
 
@@ -66,7 +65,7 @@ class TestGPUDetection:
     def test_detect_gpu_gtx_980(self, mock_run):
         """Test detection of GTX 980 (Maxwell)."""
         mock_run.return_value = MagicMock(
-            stdout="NVIDIA GeForce GTX 980, 4.0 GB, 5.2, 470.256.02, 11.7\n",
+            stdout="NVIDIA GeForce GTX 980, 4.0 GB, 5.2, 470.256.02\n",
             returncode=0,
         )
 
@@ -77,6 +76,30 @@ class TestGPUDetection:
         assert "GTX 980" in gpu.model
         assert gpu.compute_capability == 5.2
         assert gpu.generation == "maxwell"
+
+    def test_detect_gpu_invalid_field_fallback(self):
+        """Test fallback to lspci when nvidia-smi returns invalid field error."""
+        import subprocess
+
+        error_output = 'Field "cuda_version" is not a valid field to query.\n'
+
+        with patch("nvidia_inst.gpu.detector._nvidia_smi_available", return_value=True):
+            with patch(
+                "subprocess.run",
+                side_effect=subprocess.CalledProcessError(
+                    1, "nvidia-smi", error_output
+                ),
+            ):
+                with patch("nvidia_inst.gpu.detector._detect_gpu_lspci") as mock_lspci:
+                    mock_lspci.return_value = MagicMock(
+                        model="NVIDIA GeForce RTX 3080",
+                        generation="ampere",
+                    )
+                    gpu = detect_gpu()
+
+                    assert gpu is not None
+                    assert gpu.model == "NVIDIA GeForce RTX 3080"
+                    mock_lspci.assert_called_once()
 
 
 class TestGPUGeneration:
@@ -170,8 +193,10 @@ class TestHasNvidiaGPU:
         """Test has_nvidia_gpu returns False."""
         mock_run.side_effect = Exception("not found")
 
-        with patch("nvidia_inst.gpu.detector._nvidia_smi_available", return_value=False), \
-             patch("subprocess.run") as lspci_mock:
+        with (
+            patch("nvidia_inst.gpu.detector._nvidia_smi_available", return_value=False),
+            patch("subprocess.run") as lspci_mock,
+        ):
             lspci_mock.return_value = MagicMock(
                 stdout="00:02.0 VGA compatible controller: Intel",
                 returncode=0,

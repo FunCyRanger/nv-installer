@@ -625,7 +625,7 @@ def install_driver_cli() -> int:
     state = detect_driver_state(gpu, driver_range, distro.id)
 
     # Show options
-    choice = show_driver_options(state, distro.id)
+    choice = show_driver_options(state, driver_range, gpu, distro.id)
     if choice == -1:
         return 0
 

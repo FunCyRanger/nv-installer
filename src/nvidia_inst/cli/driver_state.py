@@ -4,6 +4,7 @@ This module provides driver state detection and option building
 functionality for the CLI interface.
 """
 
+import os
 from dataclasses import dataclass
 from enum import Enum
 
@@ -384,41 +385,315 @@ def _build_nothing_options(
     return options
 
 
-def show_driver_options(state: DriverState, distro_id: str) -> int:
-    """Show driver options menu and return selected option.
+def _get_nouveau_version() -> str:
+    """Detect Mesa version for Nouveau driver."""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["glxinfo", "-B"], capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.splitlines():
+            if "OpenGL version" in line:
+                parts = line.split(":")
+                if len(parts) > 1:
+                    version = parts[1].strip().split()[0]
+                    return version
+    except Exception:
+        pass
+    return "-"
+
+
+def _format_versionlock_conditions(conditions: list[dict]) -> str:
+    """Format versionlock conditions into human-readable string.
 
     Args:
-        state: Current driver state with available options.
-        distro_id: Distribution ID for CUDA detection.
+        conditions: List of condition dicts with key/comparator/value.
 
     Returns:
-        Selected DriverOption, or None to cancel.
+        Human-readable version string (e.g., "580.x", "12.x").
     """
-    print(f"\n{'=' * 50}")
-    print(" Driver Status")
-    print(f"{'=' * 50}")
-    print(f"\n{state.message}")
+    lower = None
+    upper = None
+    for cond in conditions:
+        if cond.get("key") == "evr":
+            if cond.get("comparator") == ">=":
+                lower = cond.get("value")
+            elif cond.get("comparator") == "<":
+                upper = cond.get("value")
 
+    if lower and upper:
+        return f"{lower}.x"
+    elif lower:
+        return f">= {lower}"
+    elif upper:
+        return f"< {upper}"
+    return "*"
+
+
+def _get_current_locks(distro_id: str) -> list[str]:
+    """Read current package manager version locks.
+
+    Returns:
+        List of lock descriptions (e.g., ["akmod-nvidia (580.x)", "cuda-toolkit (12.x)"]).
+    """
+    locks = []
+
+    if distro_id in ("ubuntu", "debian", "linuxmint"):
+        prefs_dir = "/etc/apt/preferences.d"
+        if os.path.isdir(prefs_dir):
+            for fname in os.listdir(prefs_dir):
+                if fname.startswith("nvidia-inst-"):
+                    try:
+                        with open(os.path.join(prefs_dir, fname)) as f:
+                            content = f.read()
+                            pkg = None
+                            pin = None
+                            for line in content.splitlines():
+                                if line.startswith("Package:"):
+                                    pkg = line.split(":", 1)[1].strip()
+                                elif line.startswith("Pin:"):
+                                    pin = line.split(":", 1)[1].strip()
+                            if pkg:
+                                display = f"{pkg} ({pin})" if pin else pkg
+                                locks.append(display)
+                    except OSError:
+                        pass
+
+    elif distro_id in ("fedora", "rhel", "centos", "rocky", "alma"):
+        import tomllib
+
+        vlock_path = "/etc/dnf/versionlock.toml"
+        if os.path.isfile(vlock_path):
+            try:
+                with open(vlock_path, "rb") as f:
+                    data = tomllib.load(f)
+                for pkg in data.get("packages", []):
+                    name = pkg.get("name", "")
+                    if "nvidia" in name.lower() or "cuda" in name.lower():
+                        conditions = pkg.get("conditions", [])
+                        version_str = _format_versionlock_conditions(conditions)
+                        locks.append(f"{name} ({version_str})")
+            except Exception:
+                pass
+
+    elif distro_id in (
+        "opensuse",
+        "opensuse-leap",
+        "opensuse-tumbleweed",
+        "sles",
+    ):
+        import subprocess
+
+        try:
+            result = subprocess.run(
+                ["zypper", "locks"], capture_output=True, text=True, timeout=10
+            )
+            for line in result.stdout.splitlines():
+                if "nvidia" in line.lower() or "cuda" in line.lower():
+                    parts = line.split("|")
+                    if len(parts) >= 2:
+                        locks.append(parts[1].strip())
+        except Exception:
+            pass
+
+    return locks
+
+
+def _get_option_locks(driver_range: DriverRange, action: str) -> str:
+    """Compute what would be locked for a given option.
+
+    Args:
+        driver_range: GPU's driver range with constraint info.
+        action: The option action.
+
+    Returns:
+        Lock description string or "-" if no locks.
+    """
+    if action in ("keep", "cancel", "revert_nouveau"):
+        return "-"
+
+    if not driver_range.is_limited and not driver_range.cuda_is_locked:
+        return "-"
+
+    branch = driver_range.max_branch
+    cuda_locked = driver_range.cuda_is_locked
+
+    if not branch and not cuda_locked:
+        return "-"
+
+    lock_parts = []
+    if branch:
+        if "open" in action:
+            lock_parts.append(f"nvidia-driver-{branch}-open*")
+        else:
+            lock_parts.append(f"nvidia-driver-{branch}*")
+        lock_parts.append("cuda-*")
+    elif cuda_locked and driver_range.cuda_locked_major:
+        lock_parts.append(f"cuda-toolkit-{driver_range.cuda_locked_major}*")
+
+    return ", ".join(lock_parts) if lock_parts else "-"
+
+
+def _get_constraints(driver_range: DriverRange) -> list[str]:
+    """Get constraint labels from driver range."""
+    constraints = []
+    if driver_range.is_limited or (
+        driver_range.max_branch and driver_range.cuda_is_locked
+    ):
+        constraints.append("Branch")
+    if driver_range.cuda_is_locked:
+        constraints.append("CUDA")
+    if driver_range.is_eol:
+        constraints.append("EOL")
+    return constraints
+
+
+def _get_warning_line(driver_range: DriverRange, gpu: GPUInfo) -> str | None:
+    """Get warning message for limited/EOL GPUs."""
+    if driver_range.eol_message:
+        return driver_range.eol_message
+
+    if driver_range.is_limited and driver_range.max_branch:
+        cuda_str = ""
+        if driver_range.cuda_is_locked and driver_range.cuda_locked_major:
+            cuda_str = f" CUDA frozen at {driver_range.cuda_locked_major}.x."
+        return (
+            f"{gpu.generation.capitalize()} GPUs are limited to branch "
+            f"{driver_range.max_branch}.{cuda_str}"
+        )
+
+    return None
+
+
+def _format_status_table(
+    state: DriverState,
+    driver_range: DriverRange,
+    gpu: GPUInfo,
+    distro_id: str,
+) -> str:
+    """Format the driver status comparison table.
+
+    Args:
+        state: Current driver state.
+        driver_range: Compatible driver range for the GPU.
+        gpu: Detected GPU information.
+        distro_id: Distribution ID.
+
+    Returns:
+        Formatted table string.
+    """
+    lines = []
+
+    lines.append(f"\n{'=' * 50}")
+    lines.append(" Driver Status")
+    lines.append(f"{'=' * 50}")
+    lines.append(f"\nGPU: {gpu.model} ({gpu.generation.capitalize()})")
+    lines.append(f"Distribution: {distro_id}")
+
+    current_cuda = "-"
     if state.current_version:
-        cuda_version = None
         try:
             from nvidia_inst.installer.cuda import get_cuda_installer
 
             cuda_installer = get_cuda_installer(distro_id)
-            cuda_version = cuda_installer.get_installed_cuda_version()
+            ver = cuda_installer.get_installed_cuda_version()
+            current_cuda = ver if ver else "-"
         except Exception:
             pass
-        if cuda_version:
-            print(f"  Installed: {state.current_version} (CUDA {cuda_version})")
-        else:
-            print(f"  Installed: {state.current_version}")
 
-    if not state.is_compatible and state.suggested_packages:
-        print(f"  Recommended: {' '.join(state.suggested_packages)}")
+    driver_type = get_current_driver_type()
+    if driver_type == "proprietary":
+        current_label = "Proprietary (active)"
+    elif driver_type == "nvidia_open":
+        current_label = "Open-source (active)"
+    elif driver_type == "nouveau":
+        current_label = "Nouveau (active)"
+    else:
+        current_label = "Nouveau (active)"
 
-    print("\nOptions:")
+    current_locks = _get_current_locks(distro_id)
+    current_lock_str = ", ".join(current_locks) if current_locks else "-"
+
+    option_version = driver_range.max_version or driver_range.min_version
+    option_branch = driver_range.max_branch or "-"
+    option_cuda = (
+        f"{driver_range.cuda_locked_major}.x"
+        if driver_range.cuda_is_locked
+        else (driver_range.cuda_max or driver_range.cuda_min)
+    )
+
+    lines.append("")
+    lines.append(" # | Driver               | Version   | Branch | CUDA | Locked")
+    lines.append(
+        "---+----------------------+-----------+--------+------+---------------------------"
+    )
+
+    current_version = state.current_version or "-"
+    current_branch = "-"
+    if state.current_version:
+        current_branch = state.current_version.split(".")[0]
+
+    lines.append(
+        f" * | {current_label:<20} | {current_version:<9} | {current_branch:<6} | {current_cuda:<4} | {current_lock_str}"
+    )
+
     for opt in state.options:
-        print(f"  [{opt.number}] {opt.description}")
+        if opt.action in ("keep", "cancel"):
+            continue
+
+        if opt.action in ("install", "upgrade"):
+            label = "NVIDIA proprietary"
+            version = option_version
+            branch = option_branch
+            cuda = option_cuda
+            locked = _get_option_locks(driver_range, opt.action)
+        elif opt.action in ("switch_nvidia_open", "install_nvidia_open"):
+            label = "NVIDIA open-source"
+            version = option_version
+            branch = option_branch
+            cuda = option_cuda
+            locked = _get_option_locks(driver_range, opt.action)
+        elif opt.action == "revert_nouveau":
+            label = "Nouveau"
+            version = "-"
+            branch = "-"
+            cuda = "None"
+            locked = "-"
+        else:
+            continue
+
+        lines.append(
+            f" {opt.number} | {label:<20} | {version:<9} | {branch:<6} | {cuda:<4} | {locked}"
+        )
+
+    warning = _get_warning_line(driver_range, gpu)
+    if warning:
+        lines.append("")
+        lines.append(f"[!] {warning}")
+
+    return "\n".join(lines)
+
+
+def show_driver_options(
+    state: DriverState,
+    driver_range: DriverRange,
+    gpu: GPUInfo,
+    distro_id: str,
+) -> int:
+    """Show driver options menu and return selected option.
+
+    Args:
+        state: Current driver state with available options.
+        driver_range: Compatible driver range for the GPU.
+        gpu: Detected GPU information.
+        distro_id: Distribution ID for CUDA detection.
+
+    Returns:
+        Selected option number, or -1 to cancel.
+    """
+    table = _format_status_table(state, driver_range, gpu, distro_id)
+    print(table)
 
     while True:
         try:

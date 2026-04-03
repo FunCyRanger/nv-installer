@@ -80,7 +80,7 @@ def detect_gpu() -> GPUInfo | None:
         result = subprocess.run(
             [
                 "nvidia-smi",
-                "--query-gpu=name,memory.total,compute_cap,driver_version,cuda_version",
+                "--query-gpu=name,memory.total,compute_cap,driver_version",
                 "--format=csv,noheader",
             ],
             capture_output=True,
@@ -92,6 +92,12 @@ def detect_gpu() -> GPUInfo | None:
         if not output:
             return None
 
+        if "not a valid field" in output.lower():
+            logger.warning(
+                f"nvidia-smi returned error: {output}, falling back to lspci"
+            )
+            return _detect_gpu_lspci()
+
         parts = [p.strip() for p in output.split(",")]
 
         gpu = GPUInfo(
@@ -101,7 +107,6 @@ def detect_gpu() -> GPUInfo | None:
             if len(parts) > 2 and parts[2] != "N/A"
             else None,
             driver_version=parts[3] if len(parts) > 3 and parts[3] != "N/A" else None,
-            cuda_version=parts[4] if len(parts) > 4 and parts[4] != "N/A" else None,
         )
 
         gpu.generation = _get_gpu_generation(gpu.model)
@@ -110,11 +115,14 @@ def detect_gpu() -> GPUInfo | None:
         return gpu
 
     except subprocess.CalledProcessError as e:
-        # nvidia-smi might return non-zero even on success
-        # Check if we got useful output despite the error
         if e.stdout and e.stdout.strip():
-            # We got output, so the command worked
             output = e.stdout.strip()
+            if "not a valid field" in output.lower():
+                logger.warning(
+                    f"nvidia-smi returned error: {output}, falling back to lspci"
+                )
+                return _detect_gpu_lspci()
+
             parts = [p.strip() for p in output.split(",")]
 
             gpu = GPUInfo(
@@ -126,7 +134,6 @@ def detect_gpu() -> GPUInfo | None:
                 driver_version=parts[3]
                 if len(parts) > 3 and parts[3] != "N/A"
                 else None,
-                cuda_version=parts[4] if len(parts) > 4 and parts[4] != "N/A" else None,
             )
 
             gpu.generation = _get_gpu_generation(gpu.model)
