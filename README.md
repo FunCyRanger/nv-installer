@@ -86,9 +86,9 @@ nvidia-inst uses a versioned compatibility matrix to determine the correct drive
 | Ada Lovelace | 11.8 | 13.x | 12.6 |
 | Ampere | 11.0 | 13.x | 12.6 |
 | Turing | 10.0 | 13.x | 12.6 |
-| Volta | 9.0 | 12.8 | 11.8 |
-| Pascal | 8.0 | 12.8 | 11.8 |
-| Maxwell | 7.5 | 12.8 | 11.8 |
+| Volta | 9.0 | 12.x | 11.8 |
+| Pascal | 8.0 | 12.x | 11.8 |
+| Maxwell | 7.5 | 12.x | 11.8 |
 | Kepler | 7.5 | 9.0 | 9.0 |
 
 ### Matrix Management
