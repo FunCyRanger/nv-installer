@@ -98,7 +98,7 @@ jobs:
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-report-${{ matrix.distro }}
+          name: coverage-report-${{ matrix.distro == 'ubuntu:24.04' && 'ubuntu' || (matrix.distro == 'fedora:40' && 'fedora' || 'arch') }}
           path: coverage.xml
           retention-days: 30
 
