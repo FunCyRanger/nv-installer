@@ -117,7 +117,7 @@ def nothing_state():
 class TestExecuteDriverChangeSimulate:
     """Test execute_driver_change with simulate=True for all actions."""
 
-    @patch("nvidia_inst.cli.main.get_compatible_driver_packages")
+    @patch("nvidia_inst.installer.driver.get_compatible_driver_packages")
     def test_simulate_upgrade_optimal(
         self,
                 mock_packages,
@@ -146,7 +146,7 @@ class TestExecuteDriverChangeSimulate:
         assert result == 0
 # #         assert "nvidia-driver-535" in output
 
-    @patch("nvidia_inst.cli.main.get_compatible_driver_packages")
+    @patch("nvidia_inst.installer.driver.get_compatible_driver_packages")
     def test_simulate_install_wrong_branch(
         self,
                 mock_packages,
@@ -173,7 +173,7 @@ class TestExecuteDriverChangeSimulate:
 
         assert result == 0
 
-    @patch("nvidia_inst.cli.main.get_compatible_driver_packages")
+    @patch("nvidia_inst.installer.driver.get_compatible_driver_packages")
     def test_simulate_install_nouveau(
         self,
                 mock_packages,
@@ -200,7 +200,7 @@ class TestExecuteDriverChangeSimulate:
 
         assert result == 0
 
-    @patch("nvidia_inst.cli.main.get_compatible_driver_packages")
+    @patch("nvidia_inst.installer.driver.get_compatible_driver_packages")
     def test_simulate_install_nothing(
         self,
                 mock_packages,
@@ -317,7 +317,7 @@ class TestExecuteDriverChangeSimulate:
 
         assert result == 1
 
-    @patch("nvidia_inst.cli.main.get_nvidia_open_packages")
+    @patch("nvidia_inst.installer.driver.get_nvidia_open_packages")
     def test_simulate_switch_nvidia_open(
         self,
                 mock_open_packages,
@@ -349,7 +349,7 @@ class TestExecuteDriverChangeSimulate:
         assert result == 0
 # #         assert "nvidia-driver-590-open" in output
 
-    @patch("nvidia_inst.cli.main.get_nvidia_open_packages")
+    @patch("nvidia_inst.installer.driver.get_nvidia_open_packages")
     def test_simulate_install_nvidia_open(
         self,
                 mock_open_packages,
