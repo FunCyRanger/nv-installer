@@ -59,7 +59,7 @@ class TestRevertToNouveau:
         assert result.success is False
         assert "Unsupported distribution" in result.errors[0]
 
-    @patch("nvidia_inst.installer.uninstaller.is_root", return_value=False)
+    @patch("nvidia_inst.utils.permissions.is_root", return_value=False)
     def test_requires_root(self, mock_is_root):
         """Test revert fails when not running as root."""
         result = revert_to_nouveau("ubuntu")
