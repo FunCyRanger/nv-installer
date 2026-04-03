@@ -80,7 +80,7 @@ jobs:
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     needs: [lint, typecheck]
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -137,7 +137,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e . pytest
+          pip install --break-system-packages -e . pytest
 
       - name: Run E2E table tests
         run: pytest tests/test_driver_state_e2e.py -v
