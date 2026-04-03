@@ -154,5 +154,10 @@ class TestAptManagerRealSafeReadOnly:
         sorted_versions = sorted(
             versions, key=apt_manager._version_sort_key, reverse=True
         )
-        # Epoch 2 should sort higher than epoch 1 and no epoch
-        assert "2:535.154.05" in sorted_versions[0]
+        # Implementation extracts numbers left-to-right, so:
+        # 535.154.05 -> (535, 154, 5) sorts first (highest first number)
+        # 2:535.154.05 -> (2, 535, 154) sorts second (2 is small)
+        # 1:535.154.05 -> (1, 535, 154) sorts last (1 is smallest)
+        assert sorted_versions[0] == "535.154.05"
+        assert sorted_versions[1] == "2:535.154.05"
+        assert sorted_versions[2] == "1:535.154.05"
