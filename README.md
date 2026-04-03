@@ -172,8 +172,8 @@ Depending on your current driver state and GPU, you'll see relevant options:
 **No driver installed (repos enabled):**
 ```
 Options:
-  [1] Install proprietary driver (CUDA 11.0-12.8) [RECOMMENDED]
-  [2] Install NVIDIA Open (CUDA 11.0-12.8)
+  [1] Install proprietary driver (CUDA 10.0-13.x) [RECOMMENDED]
+  [2] Install NVIDIA Open (CUDA 10.0-13.x)
   [3] Install Nouveau (open-source, no CUDA support)
   [4] Cancel
 ```
@@ -183,7 +183,7 @@ Options:
 Options:
   [1] Upgrade to latest [RECOMMENDED]
   [2] Keep current driver
-  [3] Switch to NVIDIA Open (CUDA 11.0-12.8)
+  [3] Switch to NVIDIA Open (CUDA 10.0-13.x)
   [4] Switch to Nouveau (open-source, no CUDA support)
   [5] Cancel
 ```
@@ -191,8 +191,8 @@ Options:
 **Proprietary driver installed but non-free repos not enabled:**
 ```
 Options:
-  [1] Enable non-free repos + install proprietary (CUDA 11.0-12.8) [RECOMMENDED]
-  [2] Enable non-free repos + install NVIDIA Open (CUDA 11.0-12.8)
+  [1] Enable non-free repos + install proprietary (CUDA 10.0-13.x) [RECOMMENDED]
+  [2] Enable non-free repos + install NVIDIA Open (CUDA 10.0-13.x)
   [3] Install Nouveau (open-source, no CUDA support)
   [4] Cancel
 ```
@@ -200,7 +200,7 @@ Options:
 ### CUDA Support Indication
 
 Options show CUDA version ranges when available:
-- `(CUDA 11.0-12.8)` - Full CUDA support
+- `(CUDA 10.0-13.x)` - Full CUDA support
 - `(no CUDA support)` - Nouveau only
 
 ### Distro-Specific Package Names
