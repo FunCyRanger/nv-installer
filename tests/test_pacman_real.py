@@ -43,9 +43,10 @@ class TestPacmanManagerReal:
         # Search for a package that should exist in core
         packages = pacman_manager.search("bash")
         assert isinstance(packages, list)
-        # Should find bash in core repo
-        if packages:
-            assert "bash" in packages
+        # Should find bash-related packages in core repo
+        assert len(packages) > 0
+        # At least one result should contain "bash"
+        assert any("bash" in pkg for pkg in packages)
 
     def test_get_installed_version_real(self, pacman_manager):
         """Test getting installed version of a system package."""
