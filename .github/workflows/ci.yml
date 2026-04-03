@@ -75,7 +75,7 @@ jobs:
           pip install pytest
       
       - name: Run tests
-        run: pytest tests/ -v
+        run: pytest tests/ --tb=short -q
 
   coverage:
     name: Coverage
