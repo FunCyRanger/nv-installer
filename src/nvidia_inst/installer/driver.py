@@ -607,6 +607,23 @@ def install_driver(
 
     driver_pkgs = installer.get_driver_packages(driver_version)
 
+    # Set version locks BEFORE installation to prevent pulling wrong versions
+    lock_errors = []
+    if driver_version and pkg_manager:
+        for pkg in driver_pkgs:
+            if not pkg_manager.pin_version(pkg, driver_version):
+                lock_errors.append(pkg)
+                logger.error(f"Failed to pin {pkg} to version {driver_version}")
+            else:
+                logger.info(f"Pinned {pkg} to version {driver_version}")
+
+    if lock_errors:
+        return InstallResult(
+            success=False,
+            message=f"Failed to set version locks for: {', '.join(lock_errors)}",
+        )
+
+    # Install driver packages (constrained by version locks)
     try:
         logger.info(f"Installing driver packages: {driver_pkgs}")
         installer.install(driver_pkgs)
@@ -618,11 +635,7 @@ def install_driver(
             message=f"Installation failed: {e}",
         )
 
-    if driver_version and pkg_manager:
-        for pkg in driver_pkgs:
-            if pkg_manager.pin_version(pkg, driver_version):
-                logger.info(f"Pinned {pkg} to version {driver_version}")
-
+    # Install CUDA packages (constrained by version locks)
     if with_cuda:
         cuda_pkgs = installer.get_cuda_packages(cuda_version)
         if cuda_pkgs:
@@ -632,21 +645,40 @@ def install_driver(
 
                 # Pin CUDA version if locked
                 if driver_range and driver_range.cuda_is_locked and pkg_manager:
-                    if driver_range.cuda_locked_major:
-                        pin_cuda_to_major_version(
-                            _get_distro_id_from_installer(installer),
-                            driver_range.cuda_locked_major,
-                            pkg_manager,
-                        )
-                    elif cuda_version:
-                        pin_cuda_to_exact_version(
-                            _get_distro_id_from_installer(installer),
-                            cuda_version,
-                            pkg_manager,
+                    cuda_lock_errors = []
+                    if driver_range.cuda_locked_major and not pin_cuda_to_major_version(
+                        _get_distro_id_from_installer(installer),
+                        driver_range.cuda_locked_major,
+                        pkg_manager,
+                    ):
+                        cuda_lock_errors.append("cuda-toolkit")
+                    elif cuda_version and not pin_cuda_to_exact_version(
+                        _get_distro_id_from_installer(installer),
+                        cuda_version,
+                        pkg_manager,
+                    ):
+                        cuda_lock_errors.append("cuda-toolkit")
+
+                    if cuda_lock_errors:
+                        logger.warning(
+                            f"Failed to set CUDA version locks for: {', '.join(cuda_lock_errors)}"
                         )
 
             except Exception as e:
                 logger.warning(f"CUDA installation failed: {e}")
+
+    # Verify version locks are active
+    if driver_range and driver_range.max_branch and pkg_manager:
+        from nvidia_inst.distro.versionlock import verify_versionlock_pattern_active
+
+        for pkg in driver_pkgs:
+            success, msg = verify_versionlock_pattern_active(
+                pkg, driver_range.max_branch
+            )
+            if success:
+                logger.info(f"Verified lock for {pkg}: {msg}")
+            else:
+                logger.warning(f"Lock verification failed for {pkg}: {msg}")
 
     installer.post_install()
 

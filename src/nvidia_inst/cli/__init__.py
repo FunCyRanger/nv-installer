@@ -81,7 +81,6 @@ from nvidia_inst.cli.parser import parse_args
 # Re-export from simulate
 from nvidia_inst.cli.simulate import (
     simulate_change,
-    simulate_generic,
     simulate_nouveau_install,
     simulate_nvidia_open_install,
     simulate_revert,

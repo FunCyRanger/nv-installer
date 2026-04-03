@@ -6,7 +6,6 @@ from unittest.mock import patch
 from nvidia_inst.cli.simulate import (
     get_initramfs_command,
     simulate_change,
-    simulate_generic,
     simulate_nouveau_install,
     simulate_nvidia_open_install,
     simulate_revert,
@@ -40,46 +39,6 @@ class TestGetInitramfsCommand:
         """Test unknown tool returns default initramfs command."""
         cmd = get_initramfs_command("unknown")
         assert cmd == ["update-initramfs", "-u"]
-
-
-class TestSimulateGeneric:
-    """Tests for simulate_generic function."""
-
-    @patch("sys.stdout", new_callable=StringIO)
-    def test_simulate_generic_output(self, mock_stdout):
-        """Test simulate_generic outputs correctly."""
-        simulate_generic(
-            title="Test Title",
-            state_message="Driver installed",
-            current_version="535.154.05",
-            packages=["nvidia-driver-535"],
-            cuda_pkgs=["cuda-toolkit"],
-            steps=["step 1", "step 2"],
-        )
-
-        output = mock_stdout.getvalue()
-        assert "SIMULATE MODE - Test Title" in output
-        assert "Driver installed" in output
-        assert "535.154.05" in output
-        assert "nvidia-driver-535" in output
-        assert "cuda-toolkit" in output
-        assert "1. step 1" in output
-        assert "2. step 2" in output
-
-    @patch("sys.stdout", new_callable=StringIO)
-    def test_simulate_generic_no_state(self, mock_stdout):
-        """Test simulate_generic without state message."""
-        simulate_generic(
-            title="Test Title",
-            state_message=None,
-            current_version=None,
-            packages=["nvidia-driver-535"],
-            cuda_pkgs=[],
-            steps=["step 1"],
-        )
-
-        output = mock_stdout.getvalue()
-        assert "Current state" not in output
 
 
 class TestSimulateChange:

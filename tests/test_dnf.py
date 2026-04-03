@@ -172,39 +172,40 @@ class TestDnfManager:
         assert version is None
 
     def test_pin_version_success(self, dnf_manager, mock_subprocess_run):
-        """Test successful version pinning via versionlock."""
-        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        """Test successful version pinning via versionlock.toml."""
+        mock_toml = '{"version": "1.0", "packages": []}'
+        mock_subprocess_run.return_value = MagicMock(
+            returncode=0, stdout=mock_toml, stderr=""
+        )
         result = dnf_manager.pin_version("akmod-nvidia", "580.*")
         assert result is True
-        call_args = mock_subprocess_run.call_args[0][0]
-        assert "versionlock" in call_args
-        assert "add" in call_args
-        # --raw is only used for dnf4, not dnf5
-        assert "akmod-nvidia-580.*" in call_args
 
     def test_pin_version_with_exact_version(self, dnf_manager, mock_subprocess_run):
         """Test version pinning with exact version."""
-        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        result = dnf_manager.pin_version("akmod-nvidia", "535.154.05")
-        assert result is True
-        call_args = mock_subprocess_run.call_args[0][0]
-        assert "akmod-nvidia-535.154.05" in call_args
-
-    def test_pin_version_default_star(self, dnf_manager, mock_subprocess_run):
-        """Test version pinning with default * pattern."""
-        mock_subprocess_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        result = dnf_manager.pin_version("akmod-nvidia")
-        assert result is True
-        call_args = mock_subprocess_run.call_args[0][0]
-        assert "akmod-nvidia-*" in call_args
-
-    def test_pin_version_failure(self, dnf_manager, mock_subprocess_run):
-        """Test version pinning failure."""
-        mock_subprocess_run.side_effect = subprocess.CalledProcessError(
-            1, "dnf versionlock", stderr="Error"
+        mock_toml = '{"version": "1.0", "packages": []}'
+        mock_subprocess_run.return_value = MagicMock(
+            returncode=0, stdout=mock_toml, stderr=""
         )
         result = dnf_manager.pin_version("akmod-nvidia", "535.154.05")
+        assert result is True
+
+    def test_pin_version_default_star(self, dnf_manager, mock_subprocess_run):
+        """Test version pinning with default * pattern returns False."""
+        mock_toml = '{"version": "1.0", "packages": []}'
+        mock_subprocess_run.return_value = MagicMock(
+            returncode=0, stdout=mock_toml, stderr=""
+        )
+        result = dnf_manager.pin_version("akmod-nvidia")
         assert result is False
+
+    def test_pin_version_failure(self, dnf_manager):
+        """Test version pinning failure when versionlock write fails."""
+        with patch(
+            "nvidia_inst.distro.versionlock.add_pattern_versionlock_entry",
+            return_value=(False, "Write failed"),
+        ):
+            result = dnf_manager.pin_version("akmod-nvidia", "535")
+            assert result is False
 
     def test_get_all_versions(self, dnf_manager, mock_subprocess_run, dnf_list_output):
         """Test getting all available versions."""

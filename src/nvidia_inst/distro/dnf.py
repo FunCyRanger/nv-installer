@@ -189,30 +189,44 @@ class DnfManager(PackageManager):
             return None
 
     def pin_version(self, package: str, version: str = "*") -> bool:
-        """Pin package to version using dnf versionlock.
+        """Pin package to version using versionlock.toml.
+
+        Uses direct TOML file editing for pattern-based branch locking.
+        Allows minor/bugfix updates within the branch while blocking major version changes.
 
         Args:
-            package: Package name (e.g., 'akmod-nvidia').
-            version: Version pattern. Defaults to '*' for branch locking.
-                     Use '580.*' to lock to 580 branch, 'exact.version' for exact.
+            package: Package name (e.g., 'akmod-nvidia', 'cuda-toolkit').
+            version: Version pattern. Use '580.*' to lock to 580 branch,
+                     '12.*' to lock to CUDA 12.x, 'exact.version' for exact.
 
         Returns:
             True if successful, False otherwise.
         """
-        try:
-            cmd = [self._dnf_path, "versionlock", "add"]
+        from nvidia_inst.distro.versionlock import add_pattern_versionlock_entry
 
-            # DNF4 uses --raw flag, DNF5 doesn't support it
-            if self._dnf_version == "dnf4":
-                cmd.append("--raw")
+        # Extract major version from pattern (e.g., "580.*" -> "580", "12.*" -> "12")
+        major_version = version.split(".")[0]
 
-            cmd.append(f"{package}-{version}")
-            subprocess.run(cmd, check=True, capture_output=True)
-            logger.info(f"Locked {package} to pattern {version}")
-            return True
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to lock version: {e.stderr}")
+        # Validate major version is a number
+        if not major_version.isdigit():
+            logger.error(
+                f"Invalid version pattern '{version}' for {package}: "
+                f"major version '{major_version}' is not numeric"
+            )
             return False
+
+        success, msg = add_pattern_versionlock_entry(
+            package_name=package,
+            major_version=major_version,
+            comment=f"nvidia-inst: Lock {package} to {major_version}.x",
+        )
+
+        if success:
+            logger.info(f"Locked {package} to {major_version}.x via versionlock.toml")
+        else:
+            logger.error(f"Failed to lock {package}: {msg}")
+
+        return success
 
     def get_all_versions(self, package: str) -> list[str]:
         """Get all available versions of a package using dnf."""

@@ -376,6 +376,8 @@ def execute_driver_change(
                 distro.id,
                 with_cuda=with_cuda,
                 cuda_version=cuda_version,
+                driver_range=driver_range,
+                gpu=gpu,
             )
             return 0
 
@@ -447,6 +449,8 @@ def execute_driver_change(
                 distro.id,
                 with_cuda=with_cuda,
                 cuda_version=cuda_version,
+                driver_range=driver_range,
+                gpu=gpu,
             )
             return 0
 
@@ -473,7 +477,23 @@ def execute_driver_change(
         if removed:
             print(f"Removed: {', '.join(removed)}")
 
-        # Install NVIDIA Open packages
+        # Set version locks BEFORE installation
+        if driver_range.max_branch:
+            print("\n--- Setting version locks ---")
+            pkg_manager = get_package_manager()
+            lock_errors = []
+            for pkg in packages:
+                if pkg_manager.pin_version(pkg, f"{driver_range.max_branch}.*"):
+                    print(f"  Locked: {pkg} to {driver_range.max_branch}.x")
+                else:
+                    lock_errors.append(pkg)
+                    print(f"  [WARNING] Failed to lock: {pkg}")
+            if lock_errors:
+                print(
+                    f"\n[WARNING] Some packages could not be locked: {', '.join(lock_errors)}"
+                )
+
+        # Install NVIDIA Open packages (constrained by version locks)
         print("\n--- Installing NVIDIA Open driver packages ---")
         try:
             install_cmd = get_package_manager()
@@ -483,7 +503,7 @@ def execute_driver_change(
             print(f"[ERROR] Installation failed: {e}")
             return 1
 
-        # Install CUDA if requested
+        # Install CUDA if requested (constrained by version locks)
         if with_cuda:
             print("\n--- Installing CUDA ---")
             cuda_installer = get_cuda_installer(distro.id)
@@ -493,8 +513,38 @@ def execute_driver_change(
                     install_cmd = get_package_manager()
                     install_cmd.install(cuda_pkgs)
                     print(f"[OK] Installed CUDA: {' '.join(cuda_pkgs)}")
+
+                    # Lock CUDA packages if GPU has CUDA lock
+                    if driver_range.cuda_is_locked and driver_range.cuda_locked_major:
+                        print("\n--- Locking CUDA packages ---")
+                        from nvidia_inst.installer.cuda import pin_cuda_to_major_version
+
+                        if pin_cuda_to_major_version(
+                            distro.id,
+                            driver_range.cuda_locked_major,
+                            get_package_manager(),
+                        ):
+                            print(
+                                f"  Locked CUDA to {driver_range.cuda_locked_major}.x"
+                            )
+                        else:
+                            print("  [WARNING] Failed to lock CUDA packages")
                 except Exception as e:
                     print(f"[ERROR] CUDA installation failed: {e}")
+
+        # Verify version locks are active
+        if driver_range.max_branch:
+            print("\n--- Verifying version locks ---")
+            from nvidia_inst.distro.versionlock import verify_versionlock_pattern_active
+
+            for pkg in packages:
+                success, msg = verify_versionlock_pattern_active(
+                    pkg, driver_range.max_branch
+                )
+                if success:
+                    print(f"  [OK] {pkg}: {msg}")
+                else:
+                    print(f"  [WARNING] {pkg}: {msg}")
 
         # Rebuild initramfs
         print("\n--- Rebuilding initramfs ---")
@@ -519,6 +569,8 @@ def execute_driver_change(
                 distro.id,
                 with_cuda=with_cuda,
                 cuda_version=cuda_version,
+                driver_range=driver_range,
+                gpu=gpu,
             )
             return 0
 
@@ -546,7 +598,23 @@ def execute_driver_change(
             if removed:
                 print(f"Removed: {', '.join(removed)}")
 
-        # Install new packages
+        # Set version locks BEFORE installation
+        if driver_range.max_branch:
+            print("\n--- Setting version locks ---")
+            pkg_manager = get_package_manager()
+            lock_errors = []
+            for pkg in packages:
+                if pkg_manager.pin_version(pkg, f"{driver_range.max_branch}.*"):
+                    print(f"  Locked: {pkg} to {driver_range.max_branch}.x")
+                else:
+                    lock_errors.append(pkg)
+                    print(f"  [WARNING] Failed to lock: {pkg}")
+            if lock_errors:
+                print(
+                    f"\n[WARNING] Some packages could not be locked: {', '.join(lock_errors)}"
+                )
+
+        # Install new packages (constrained by version locks)
         print("\n--- Installing driver packages ---")
         try:
             install_cmd = get_package_manager()
@@ -556,7 +624,7 @@ def execute_driver_change(
             print(f"[ERROR] Installation failed: {e}")
             return 1
 
-        # Install CUDA if requested
+        # Install CUDA if requested (constrained by version locks)
         if with_cuda:
             print("\n--- Installing CUDA ---")
             cuda_installer = get_cuda_installer(distro.id)
@@ -566,8 +634,38 @@ def execute_driver_change(
                     install_cmd = get_package_manager()
                     install_cmd.install(cuda_pkgs)
                     print(f"[OK] Installed CUDA: {' '.join(cuda_pkgs)}")
+
+                    # Lock CUDA packages if GPU has CUDA lock
+                    if driver_range.cuda_is_locked and driver_range.cuda_locked_major:
+                        print("\n--- Locking CUDA packages ---")
+                        from nvidia_inst.installer.cuda import pin_cuda_to_major_version
+
+                        if pin_cuda_to_major_version(
+                            distro.id,
+                            driver_range.cuda_locked_major,
+                            get_package_manager(),
+                        ):
+                            print(
+                                f"  Locked CUDA to {driver_range.cuda_locked_major}.x"
+                            )
+                        else:
+                            print("  [WARNING] Failed to lock CUDA packages")
                 except Exception as e:
                     print(f"[ERROR] CUDA installation failed: {e}")
+
+        # Verify version locks are active
+        if driver_range.max_branch:
+            print("\n--- Verifying version locks ---")
+            from nvidia_inst.distro.versionlock import verify_versionlock_pattern_active
+
+            for pkg in packages:
+                success, msg = verify_versionlock_pattern_active(
+                    pkg, driver_range.max_branch
+                )
+                if success:
+                    print(f"  [OK] {pkg}: {msg}")
+                else:
+                    print(f"  [WARNING] {pkg}: {msg}")
 
         # Rebuild initramfs
         print("\n--- Rebuilding initramfs ---")
