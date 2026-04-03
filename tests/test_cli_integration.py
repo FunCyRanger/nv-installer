@@ -430,371 +430,428 @@ class TestExecuteDriverChangeSimulate:
 class TestRevertToNouveauCli:
     """Test revert_to_nouveau_cli function."""
 
-    @patch("nvidia_inst.cli.main.parse_args")
-    @patch("nvidia_inst.cli.main.detect_distro")
-    @patch("nvidia_inst.cli.main.check_nvidia_packages_installed")
-    @patch("sys.stdout", new_callable=StringIO)
-    def test_revert_no_packages(
-        self, mock_stdout, mock_packages, mock_distro, mock_args
-    ):
+    def test_revert_no_packages(self, capsys):
         """Test revert when no packages installed."""
-        from nvidia_inst.cli.main import revert_to_nouveau_cli
+        import sys
 
-        mock_args.return_value = MagicMock()
-        mock_distro.return_value = MagicMock(id="ubuntu", version_id="22.04")
-        mock_packages.return_value = []
+        cli_main = sys.modules["nvidia_inst.cli.main"]
+        with patch.object(cli_main, "parse_args", return_value=MagicMock()):
+            with patch.object(
+                cli_main,
+                "detect_distro",
+                return_value=MagicMock(id="ubuntu", version_id="22.04"),
+            ):
+                with patch.object(
+                    cli_main, "check_nvidia_packages_installed", return_value=[]
+                ):
+                    from nvidia_inst.cli.main import revert_to_nouveau_cli
 
-        result = revert_to_nouveau_cli()
+                    result = revert_to_nouveau_cli()
+                    assert result == 0
+                    output = capsys.readouterr().out
+                    assert "No proprietary Nvidia packages found" in output
 
-        assert result == 0
-        output = mock_stdout.getvalue()
-        assert "No proprietary Nvidia packages found" in output
-
-    @patch("nvidia_inst.cli.main.parse_args")
-    @patch("nvidia_inst.cli.main.detect_distro")
-    @patch("nvidia_inst.cli.main.check_nvidia_packages_installed")
-    @patch("builtins.input", return_value="n")
-    @patch("sys.stdout", new_callable=StringIO)
-    def test_revert_cancelled(
-        self, mock_stdout, mock_input, mock_packages, mock_distro, mock_args
-    ):
+    def test_revert_cancelled(self, capsys):
         """Test revert when user cancels."""
-        from nvidia_inst.cli.main import revert_to_nouveau_cli
+        import sys
 
-        mock_args.return_value = MagicMock()
-        mock_distro.return_value = MagicMock(id="ubuntu", version_id="22.04")
-        mock_packages.return_value = ["nvidia-driver-535"]
+        cli_main = sys.modules["nvidia_inst.cli.main"]
+        with patch.object(cli_main, "parse_args", return_value=MagicMock()):
+            with patch.object(
+                cli_main,
+                "detect_distro",
+                return_value=MagicMock(id="ubuntu", version_id="22.04"),
+            ):
+                with patch.object(
+                    cli_main,
+                    "check_nvidia_packages_installed",
+                    return_value=["nvidia-driver-535"],
+                ):
+                    with patch("builtins.input", return_value="n"):
+                        from nvidia_inst.cli.main import revert_to_nouveau_cli
 
-        result = revert_to_nouveau_cli()
+                        result = revert_to_nouveau_cli()
+                        assert result == 0
+                        output = capsys.readouterr().out
+                        assert "Cancelled" in output
 
-        assert result == 0
-        output = mock_stdout.getvalue()
-        assert "Cancelled" in output
-
-    @patch("nvidia_inst.cli.main.parse_args")
-    @patch("nvidia_inst.cli.main.detect_distro")
-    @patch("nvidia_inst.cli.main.check_nvidia_packages_installed")
-    @patch("builtins.input", return_value="y")
-    @patch("nvidia_inst.cli.main.require_root", return_value=False)
-    @patch("sys.stdout", new_callable=StringIO)
-    def test_revert_no_root(
-        self, mock_stdout, mock_root, mock_input, mock_packages, mock_distro, mock_args
-    ):
+    def test_revert_no_root(self, capsys):
         """Test revert when no root privileges."""
-        from nvidia_inst.cli.main import revert_to_nouveau_cli
+        import sys
 
-        mock_args.return_value = MagicMock()
-        mock_distro.return_value = MagicMock(id="ubuntu", version_id="22.04")
-        mock_packages.return_value = ["nvidia-driver-535"]
+        cli_main = sys.modules["nvidia_inst.cli.main"]
+        with patch.object(cli_main, "parse_args", return_value=MagicMock()):
+            with patch.object(
+                cli_main,
+                "detect_distro",
+                return_value=MagicMock(id="ubuntu", version_id="22.04"),
+            ):
+                with patch.object(
+                    cli_main,
+                    "check_nvidia_packages_installed",
+                    return_value=["nvidia-driver-535"],
+                ):
+                    with patch("builtins.input", return_value="y"):
+                        with patch.object(cli_main, "require_root", return_value=False):
+                            from nvidia_inst.cli.main import revert_to_nouveau_cli
 
-        result = revert_to_nouveau_cli()
+                            result = revert_to_nouveau_cli()
+                            assert result == 1
+                            output = capsys.readouterr().out
+                            assert "Root privileges required" in output
 
-        assert result == 1
-        output = mock_stdout.getvalue()
-        assert "Root privileges required" in output
-
-    @patch("nvidia_inst.cli.main.parse_args")
-    @patch("nvidia_inst.cli.main.detect_distro")
-    @patch("nvidia_inst.cli.main.check_nvidia_packages_installed")
-    @patch("builtins.input", return_value="y")
-    @patch("nvidia_inst.cli.main.require_root", return_value=True)
-    @patch("nvidia_inst.cli.main.revert_to_nouveau")
-    @patch("sys.stdout", new_callable=StringIO)
-    def test_revert_success(
-        self,
-        mock_stdout,
-        mock_revert,
-        mock_root,
-        mock_input,
-        mock_packages,
-        mock_distro,
-        mock_args,
-    ):
+    def test_revert_success(self, capsys):
         """Test successful revert."""
-        from nvidia_inst.cli.main import revert_to_nouveau_cli
+        import sys
 
-        mock_args.return_value = MagicMock()
-        mock_distro.return_value = MagicMock(id="ubuntu", version_id="22.04")
-        mock_packages.return_value = ["nvidia-driver-535"]
-        mock_revert.return_value = MagicMock(
-            success=True,
-            message="Reverted successfully",
-            packages_removed=["nvidia-driver-535"],
-        )
+        cli_main = sys.modules["nvidia_inst.cli.main"]
+        with patch.object(cli_main, "parse_args", return_value=MagicMock()):
+            with patch.object(
+                cli_main,
+                "detect_distro",
+                return_value=MagicMock(id="ubuntu", version_id="22.04"),
+            ):
+                with patch.object(
+                    cli_main,
+                    "check_nvidia_packages_installed",
+                    return_value=["nvidia-driver-535"],
+                ):
+                    with patch("builtins.input", return_value="y"):
+                        with patch.object(cli_main, "require_root", return_value=True):
+                            with patch.object(
+                                cli_main,
+                                "revert_to_nouveau",
+                                return_value=MagicMock(
+                                    success=True,
+                                    message="Reverted successfully",
+                                    packages_removed=["nvidia-driver-535"],
+                                ),
+                            ):
+                                from nvidia_inst.cli.main import revert_to_nouveau_cli
 
-        result = revert_to_nouveau_cli()
+                                result = revert_to_nouveau_cli()
+                                assert result == 0
+                                output = capsys.readouterr().out
+                                assert "Reverted successfully" in output
 
-        assert result == 0
-        output = mock_stdout.getvalue()
-        assert "Reverted successfully" in output
-
-    @patch("nvidia_inst.cli.main.parse_args")
-    @patch("nvidia_inst.cli.main.detect_distro")
-    @patch("nvidia_inst.cli.main.check_nvidia_packages_installed")
-    @patch("builtins.input", return_value="y")
-    @patch("nvidia_inst.cli.main.require_root", return_value=True)
-    @patch("nvidia_inst.cli.main.revert_to_nouveau")
-    @patch("sys.stdout", new_callable=StringIO)
-    def test_revert_failure(
-        self,
-        mock_stdout,
-        mock_revert,
-        mock_root,
-        mock_input,
-        mock_packages,
-        mock_distro,
-        mock_args,
-    ):
+    def test_revert_failure(self, capsys):
         """Test failed revert."""
-        from nvidia_inst.cli.main import revert_to_nouveau_cli
+        import sys
 
-        mock_args.return_value = MagicMock()
-        mock_distro.return_value = MagicMock(id="ubuntu", version_id="22.04")
-        mock_packages.return_value = ["nvidia-driver-535"]
-        mock_revert.return_value = MagicMock(
-            success=False, errors=["Package removal failed"]
-        )
+        cli_main = sys.modules["nvidia_inst.cli.main"]
+        with patch.object(cli_main, "parse_args", return_value=MagicMock()):
+            with patch.object(
+                cli_main,
+                "detect_distro",
+                return_value=MagicMock(id="ubuntu", version_id="22.04"),
+            ):
+                with patch.object(
+                    cli_main,
+                    "check_nvidia_packages_installed",
+                    return_value=["nvidia-driver-535"],
+                ):
+                    with patch("builtins.input", return_value="y"):
+                        with patch.object(cli_main, "require_root", return_value=True):
+                            with patch.object(
+                                cli_main,
+                                "revert_to_nouveau",
+                                return_value=MagicMock(
+                                    success=False,
+                                    errors=["Package removal failed"],
+                                ),
+                            ):
+                                from nvidia_inst.cli.main import revert_to_nouveau_cli
 
-        result = revert_to_nouveau_cli()
-
-        assert result == 1
-        output = mock_stdout.getvalue()
-        assert "Revert failed" in output
+                                result = revert_to_nouveau_cli()
+                                assert result == 1
+                                output = capsys.readouterr().out
+                                assert "Revert failed" in output
 
 
 class TestSetPowerProfileCli:
     """Test set_power_profile_cli function."""
 
-    @patch("nvidia_inst.cli.main.parse_args")
-    @patch("nvidia_inst.cli.main.detect_distro")
-    @patch("nvidia_inst.cli.main.get_native_tool")
-    @patch("sys.stdout", new_callable=StringIO)
-    def test_no_native_tool(self, mock_stdout, mock_native, mock_distro, mock_args):
+    def test_no_native_tool(self, capsys):
         """Test when no native tool found."""
-        from nvidia_inst.cli.main import set_power_profile_cli
+        import sys
 
-        mock_args.return_value = MagicMock()
-        mock_distro.return_value = MagicMock(id="ubuntu", version_id="22.04")
-        mock_native.return_value = (None, None, None)
+        cli_main = sys.modules["nvidia_inst.cli.main"]
+        with patch.object(cli_main, "parse_args", return_value=MagicMock()):
+            with patch.object(
+                cli_main,
+                "detect_distro",
+                return_value=MagicMock(id="ubuntu", version_id="22.04"),
+            ):
+                with patch.object(
+                    cli_main, "get_native_tool", return_value=(None, None, None)
+                ):
+                    from nvidia_inst.cli.main import set_power_profile_cli
 
-        result = set_power_profile_cli("intel")
+                    result = set_power_profile_cli("intel")
+                    assert result == 1
+                    output = capsys.readouterr().out
+                    assert "No native hybrid graphics tool found" in output
 
-        assert result == 1
-        output = mock_stdout.getvalue()
-        assert "No native hybrid graphics tool found" in output
-
-    @patch("nvidia_inst.cli.main.parse_args")
-    @patch("nvidia_inst.cli.main.detect_distro")
-    @patch("nvidia_inst.cli.main.get_native_tool")
-    @patch("nvidia_inst.cli.main.require_root", return_value=False)
-    @patch("sys.stdout", new_callable=StringIO)
-    def test_no_root(self, mock_stdout, mock_root, mock_native, mock_distro, mock_args):
+    def test_no_root(self, capsys):
         """Test when no root privileges."""
-        from nvidia_inst.cli.main import set_power_profile_cli
+        import sys
 
-        mock_args.return_value = MagicMock()
-        mock_distro.return_value = MagicMock(id="ubuntu", version_id="22.04")
-        mock_native.return_value = ("prime-select", "nvidia", "intel")
+        cli_main = sys.modules["nvidia_inst.cli.main"]
+        with patch.object(cli_main, "parse_args", return_value=MagicMock()):
+            with patch.object(
+                cli_main,
+                "detect_distro",
+                return_value=MagicMock(id="ubuntu", version_id="22.04"),
+            ):
+                with patch.object(
+                    cli_main,
+                    "get_native_tool",
+                    return_value=("prime-select", "nvidia", "intel"),
+                ):
+                    with patch.object(cli_main, "require_root", return_value=False):
+                        from nvidia_inst.cli.main import set_power_profile_cli
 
-        result = set_power_profile_cli("intel")
+                        result = set_power_profile_cli("intel")
+                        assert result == 1
+                        output = capsys.readouterr().out
+                        assert "Root privileges required" in output
 
-        assert result == 1
-        output = mock_stdout.getvalue()
-        assert "Root privileges required" in output
-
-    @patch("nvidia_inst.cli.main.parse_args")
-    @patch("nvidia_inst.cli.main.detect_distro")
-    @patch("nvidia_inst.cli.main.get_native_tool")
-    @patch("nvidia_inst.cli.main.require_root", return_value=True)
-    @patch("nvidia_inst.cli.main.set_power_profile")
-    @patch("sys.stdout", new_callable=StringIO)
-    def test_success_intel(
-        self, mock_stdout, mock_set, mock_root, mock_native, mock_distro, mock_args
-    ):
+    def test_success_intel(self, capsys):
         """Test successful power profile change to intel."""
-        from nvidia_inst.cli.main import set_power_profile_cli
+        import sys
 
-        mock_args.return_value = MagicMock()
-        mock_distro.return_value = MagicMock(id="ubuntu", version_id="22.04")
-        mock_native.return_value = ("prime-select", "nvidia", "intel")
-        mock_set.return_value = True
+        cli_main = sys.modules["nvidia_inst.cli.main"]
+        with patch.object(cli_main, "parse_args", return_value=MagicMock()):
+            with patch.object(
+                cli_main,
+                "detect_distro",
+                return_value=MagicMock(id="ubuntu", version_id="22.04"),
+            ):
+                with patch.object(
+                    cli_main,
+                    "get_native_tool",
+                    return_value=("prime-select", "nvidia", "intel"),
+                ):
+                    with patch.object(cli_main, "require_root", return_value=True):
+                        with patch.object(
+                            cli_main, "set_power_profile", return_value=True
+                        ):
+                            from nvidia_inst.cli.main import set_power_profile_cli
 
-        result = set_power_profile_cli("intel")
+                            result = set_power_profile_cli("intel")
+                            assert result == 0
+                            output = capsys.readouterr().out
+                            assert "Power profile set to: intel" in output
 
-        assert result == 0
-        output = mock_stdout.getvalue()
-        assert "Power profile set to: intel" in output
-
-    @patch("nvidia_inst.cli.main.parse_args")
-    @patch("nvidia_inst.cli.main.detect_distro")
-    @patch("nvidia_inst.cli.main.get_native_tool")
-    @patch("nvidia_inst.cli.main.require_root", return_value=True)
-    @patch("nvidia_inst.cli.main.set_power_profile")
-    @patch("sys.stdout", new_callable=StringIO)
-    def test_success_hybrid(
-        self, mock_stdout, mock_set, mock_root, mock_native, mock_distro, mock_args
-    ):
+    def test_success_hybrid(self, capsys):
         """Test successful power profile change to hybrid."""
-        from nvidia_inst.cli.main import set_power_profile_cli
+        import sys
 
-        mock_args.return_value = MagicMock()
-        mock_distro.return_value = MagicMock(id="ubuntu", version_id="22.04")
-        mock_native.return_value = ("prime-select", "nvidia", "intel")
-        mock_set.return_value = True
+        cli_main = sys.modules["nvidia_inst.cli.main"]
+        with patch.object(cli_main, "parse_args", return_value=MagicMock()):
+            with patch.object(
+                cli_main,
+                "detect_distro",
+                return_value=MagicMock(id="ubuntu", version_id="22.04"),
+            ):
+                with patch.object(
+                    cli_main,
+                    "get_native_tool",
+                    return_value=("prime-select", "nvidia", "intel"),
+                ):
+                    with patch.object(cli_main, "require_root", return_value=True):
+                        with patch.object(
+                            cli_main, "set_power_profile", return_value=True
+                        ):
+                            from nvidia_inst.cli.main import set_power_profile_cli
 
-        result = set_power_profile_cli("hybrid")
+                            result = set_power_profile_cli("hybrid")
+                            assert result == 0
+                            output = capsys.readouterr().out
+                            assert "Power profile set to: hybrid" in output
 
-        assert result == 0
-        output = mock_stdout.getvalue()
-        assert "Power profile set to: hybrid" in output
-
-    @patch("nvidia_inst.cli.main.parse_args")
-    @patch("nvidia_inst.cli.main.detect_distro")
-    @patch("nvidia_inst.cli.main.get_native_tool")
-    @patch("nvidia_inst.cli.main.require_root", return_value=True)
-    @patch("nvidia_inst.cli.main.set_power_profile")
-    @patch("sys.stdout", new_callable=StringIO)
-    def test_success_nvidia(
-        self, mock_stdout, mock_set, mock_root, mock_native, mock_distro, mock_args
-    ):
+    def test_success_nvidia(self, capsys):
         """Test successful power profile change to nvidia."""
-        from nvidia_inst.cli.main import set_power_profile_cli
+        import sys
 
-        mock_args.return_value = MagicMock()
-        mock_distro.return_value = MagicMock(id="ubuntu", version_id="22.04")
-        mock_native.return_value = ("prime-select", "nvidia", "intel")
-        mock_set.return_value = True
+        cli_main = sys.modules["nvidia_inst.cli.main"]
+        with patch.object(cli_main, "parse_args", return_value=MagicMock()):
+            with patch.object(
+                cli_main,
+                "detect_distro",
+                return_value=MagicMock(id="ubuntu", version_id="22.04"),
+            ):
+                with patch.object(
+                    cli_main,
+                    "get_native_tool",
+                    return_value=("prime-select", "nvidia", "intel"),
+                ):
+                    with patch.object(cli_main, "require_root", return_value=True):
+                        with patch.object(
+                            cli_main, "set_power_profile", return_value=True
+                        ):
+                            from nvidia_inst.cli.main import set_power_profile_cli
 
-        result = set_power_profile_cli("nvidia")
+                            result = set_power_profile_cli("nvidia")
+                            assert result == 0
+                            output = capsys.readouterr().out
+                            assert "Power profile set to: nvidia" in output
 
-        assert result == 0
-        output = mock_stdout.getvalue()
-        assert "Power profile set to: nvidia" in output
-
-    @patch("nvidia_inst.cli.main.parse_args")
-    @patch("nvidia_inst.cli.main.detect_distro")
-    @patch("nvidia_inst.cli.main.get_native_tool")
-    @patch("nvidia_inst.cli.main.require_root", return_value=True)
-    @patch("nvidia_inst.cli.main.set_power_profile")
-    @patch("sys.stdout", new_callable=StringIO)
-    def test_failure(
-        self, mock_stdout, mock_set, mock_root, mock_native, mock_distro, mock_args
-    ):
+    def test_failure(self, capsys):
         """Test failed power profile change."""
-        from nvidia_inst.cli.main import set_power_profile_cli
+        import sys
 
-        mock_args.return_value = MagicMock()
-        mock_distro.return_value = MagicMock(id="ubuntu", version_id="22.04")
-        mock_native.return_value = ("prime-select", "nvidia", "intel")
-        mock_set.return_value = False
+        cli_main = sys.modules["nvidia_inst.cli.main"]
+        with patch.object(cli_main, "parse_args", return_value=MagicMock()):
+            with patch.object(
+                cli_main,
+                "detect_distro",
+                return_value=MagicMock(id="ubuntu", version_id="22.04"),
+            ):
+                with patch.object(
+                    cli_main,
+                    "get_native_tool",
+                    return_value=("prime-select", "nvidia", "intel"),
+                ):
+                    with patch.object(cli_main, "require_root", return_value=True):
+                        with patch.object(
+                            cli_main, "set_power_profile", return_value=False
+                        ):
+                            from nvidia_inst.cli.main import set_power_profile_cli
 
-        result = set_power_profile_cli("intel")
-
-        assert result == 1
-        output = mock_stdout.getvalue()
-        assert "Failed to set power profile" in output
+                            result = set_power_profile_cli("intel")
+                            assert result == 1
+                            output = capsys.readouterr().out
+                            assert "Failed to set power profile" in output
 
 
 class TestCheckModeWithGpu:
     """Test --check mode with GPU present."""
 
-    @patch("nvidia_inst.cli.main.parse_args")
-    @patch("nvidia_inst.cli.main.has_nvidia_gpu", return_value=True)
-    @patch("nvidia_inst.cli.compatibility.detect_distro")
-    @patch("nvidia_inst.cli.compatibility.detect_gpu")
-    @patch("nvidia_inst.cli.compatibility.get_driver_range")
-    @patch("nvidia_inst.cli.compatibility.PrerequisitesChecker")
-    @patch("nvidia_inst.cli.compatibility.print_compatibility_info")
-    @patch("nvidia_inst.installer.validation.is_nvidia_working")
-    @patch("nvidia_inst.gpu.compatibility.is_driver_compatible")
-    @patch("nvidia_inst.gpu.hybrid.detect_hybrid", return_value=None)
-    def test_check_with_working_driver(
-        self,
-        mock_hybrid,
-        mock_compat,
-        mock_working,
-        mock_print,
-        mock_prereq,
-        mock_range,
-        mock_gpu,
-        mock_distro,
-        mock_has_gpu,
-        mock_args,
-    ):
+    def test_check_with_working_driver(self, capsys):
         """Test --check with working driver."""
-        from nvidia_inst.cli.compatibility import check_compatibility
+        import sys
 
-        mock_args.return_value = MagicMock()
-        mock_distro.return_value = MagicMock(
-            id="ubuntu",
-            version_id="22.04",
-            name="Ubuntu",
-            pretty_name="Ubuntu 22.04.3 LTS",
-            kernel="5.15.0",
-        )
-        mock_gpu.return_value = MagicMock(model="RTX 3080", generation="ampere")
-        mock_range.return_value = MagicMock(
-            min_version="520.56.06",
-            max_version="590.48.01",
-            is_eol=False,
-            is_limited=False,
-        )
-        mock_prereq.return_value = MagicMock(
-            check_all=MagicMock(return_value=MagicMock(success=True))
-        )
-        mock_working.return_value = MagicMock(
-            is_working=True, driver_version="535.154.05"
-        )
-        mock_compat.return_value = True
+        cli_main = sys.modules["nvidia_inst.cli.main"]
+        with patch.object(cli_main, "parse_args", return_value=MagicMock()):
+            with patch.object(cli_main, "has_nvidia_gpu", return_value=True):
+                with patch(
+                    "nvidia_inst.cli.compatibility.detect_distro",
+                    return_value=MagicMock(
+                        id="ubuntu",
+                        version_id="22.04",
+                        name="Ubuntu",
+                        pretty_name="Ubuntu 22.04.3 LTS",
+                        kernel="5.15.0",
+                    ),
+                ):
+                    with patch(
+                        "nvidia_inst.cli.compatibility.detect_gpu",
+                        return_value=MagicMock(
+                            model="RTX 3080",
+                            generation="ampere",
+                        ),
+                    ):
+                        with patch(
+                            "nvidia_inst.cli.compatibility.get_driver_range",
+                            return_value=MagicMock(
+                                min_version="520.56.06",
+                                max_version="590.48.01",
+                                is_eol=False,
+                                is_limited=False,
+                            ),
+                        ):
+                            with patch(
+                                "nvidia_inst.cli.compatibility.PrerequisitesChecker",
+                                return_value=MagicMock(
+                                    check_all=MagicMock(
+                                        return_value=MagicMock(success=True)
+                                    ),
+                                ),
+                            ):
+                                with patch(
+                                    "nvidia_inst.cli.compatibility.print_compatibility_info"
+                                ):
+                                    with patch(
+                                        "nvidia_inst.installer.validation.is_nvidia_working",
+                                        return_value=MagicMock(
+                                            is_working=True,
+                                            driver_version="535.154.05",
+                                        ),
+                                    ):
+                                        with patch(
+                                            "nvidia_inst.gpu.compatibility.is_driver_compatible",
+                                            return_value=True,
+                                        ):
+                                            with patch(
+                                                "nvidia_inst.gpu.hybrid.detect_hybrid",
+                                                return_value=None,
+                                            ):
+                                                from nvidia_inst.cli.compatibility import (
+                                                    check_compatibility,
+                                                )
 
-        result = check_compatibility()
+                                                result = check_compatibility()
+                                                assert result == 0
 
-        assert result == 0
-
-    @patch("nvidia_inst.cli.main.parse_args")
-    @patch("nvidia_inst.cli.main.has_nvidia_gpu", return_value=True)
-    @patch("nvidia_inst.cli.compatibility.detect_distro")
-    @patch("nvidia_inst.cli.compatibility.detect_gpu")
-    @patch("nvidia_inst.cli.compatibility.get_driver_range")
-    @patch("nvidia_inst.cli.compatibility.PrerequisitesChecker")
-    @patch("nvidia_inst.cli.compatibility.print_compatibility_info")
-    @patch("nvidia_inst.installer.validation.is_nvidia_working")
-    @patch("nvidia_inst.gpu.hybrid.detect_hybrid", return_value=None)
-    def test_check_with_no_driver(
-        self,
-        mock_hybrid,
-        mock_working,
-        mock_print,
-        mock_prereq,
-        mock_range,
-        mock_gpu,
-        mock_distro,
-        mock_has_gpu,
-        mock_args,
-    ):
+    def test_check_with_no_driver(self, capsys):
         """Test --check with no driver installed."""
-        from nvidia_inst.cli.compatibility import check_compatibility
+        import sys
 
-        mock_args.return_value = MagicMock()
-        mock_distro.return_value = MagicMock(
-            id="ubuntu",
-            version_id="22.04",
-            name="Ubuntu",
-            pretty_name="Ubuntu 22.04.3 LTS",
-            kernel="5.15.0",
-        )
-        mock_gpu.return_value = MagicMock(model="RTX 3080", generation="ampere")
-        mock_range.return_value = MagicMock(
-            min_version="520.56.06",
-            max_version="590.48.01",
-            is_eol=False,
-            is_limited=False,
-        )
-        mock_prereq.return_value = MagicMock(
-            check_all=MagicMock(return_value=MagicMock(success=True))
-        )
-        mock_working.return_value = MagicMock(is_working=False, gpu_detected=True)
+        cli_main = sys.modules["nvidia_inst.cli.main"]
+        with patch.object(cli_main, "parse_args", return_value=MagicMock()):
+            with patch.object(cli_main, "has_nvidia_gpu", return_value=True):
+                with patch(
+                    "nvidia_inst.cli.compatibility.detect_distro",
+                    return_value=MagicMock(
+                        id="ubuntu",
+                        version_id="22.04",
+                        name="Ubuntu",
+                        pretty_name="Ubuntu 22.04.3 LTS",
+                        kernel="5.15.0",
+                    ),
+                ):
+                    with patch(
+                        "nvidia_inst.cli.compatibility.detect_gpu",
+                        return_value=MagicMock(
+                            model="RTX 3080",
+                            generation="ampere",
+                        ),
+                    ):
+                        with patch(
+                            "nvidia_inst.cli.compatibility.get_driver_range",
+                            return_value=MagicMock(
+                                min_version="520.56.06",
+                                max_version="590.48.01",
+                                is_eol=False,
+                                is_limited=False,
+                            ),
+                        ):
+                            with patch(
+                                "nvidia_inst.cli.compatibility.PrerequisitesChecker",
+                                return_value=MagicMock(
+                                    check_all=MagicMock(
+                                        return_value=MagicMock(success=True)
+                                    ),
+                                ),
+                            ):
+                                with patch(
+                                    "nvidia_inst.cli.compatibility.print_compatibility_info"
+                                ):
+                                    with patch(
+                                        "nvidia_inst.installer.validation.is_nvidia_working",
+                                        return_value=MagicMock(
+                                            is_working=False,
+                                            gpu_detected=True,
+                                        ),
+                                    ):
+                                        with patch(
+                                            "nvidia_inst.gpu.hybrid.detect_hybrid",
+                                            return_value=None,
+                                        ):
+                                            from nvidia_inst.cli.compatibility import (
+                                                check_compatibility,
+                                            )
 
-        result = check_compatibility()
-
-        assert result == 0
+                                            result = check_compatibility()
+                                            assert result == 0
