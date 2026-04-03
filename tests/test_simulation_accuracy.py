@@ -754,8 +754,8 @@ class TestRealDistroPackageCommands:
 
         output = _capture_simulate(
             simulate_change,
-            state_message="No NVIDIA driver installed",
-            current_version=None,
+            state_message="Driver upgrade available",
+            current_version="535.154.05",
             packages=["nvidia-driver-590", "nvidia-dkms-590"],
             distro_id="ubuntu",
             with_cuda=True,
