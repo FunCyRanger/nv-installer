@@ -133,17 +133,49 @@ pacman -D --lock cuda
 
 ## Distro Detection & Package Manager
 
-### Distro Detection
+### Tool-Based Package Manager Detection
+
+Instead of mapping distro IDs to package managers, nvidia-inst detects the actual package manager tool available on the system. This approach supports any Linux distribution using supported tools.
+
+### How It Works
+
 ```python
-def detect_distro() -> dict[str, str]:
-    """Detect Linux distribution from /etc/os-release or lsb_release."""
-    if Path("/etc/os-release").exists():
-        # Parse ID, VERSION_ID, NAME, PRETTY_NAME
-        ...
-    elif command_exists("lsb_release"):
-        # Use lsb_release -is, -rs
-        ...
-    raise DistroDetectionError("Cannot detect distribution")
+def detect_package_tool() -> str | None:
+    """Detect available package management tool.
+
+    Checks for tools in order of preference:
+    1. apt (Debian/Ubuntu)
+    2. dnf5 (Fedora latest)
+    3. dnf (Fedora)
+    4. pacman (Arch)
+    5. zypper (openSUSE)
+
+    Returns:
+        Tool name (apt, dnf5, dnf, pacman, zypper) or None.
+    """
+    tools = ["apt", "dnf5", "dnf", "yum", "pacman", "pamac", "paru", "yay", "zypper"]
+    for tool in tools:
+        if shutil.which(tool):
+            return tool
+    return None
+
+def get_package_manager() -> PackageManager:
+    """Get appropriate package manager by detecting available tools."""
+    tool = detect_package_tool()
+    manager_class = _TOOL_MANAGERS.get(tool)
+    return manager_class()
+```
+
+### Tool Property
+
+Each package manager class has a `tool` property that returns the actual tool name:
+
+```python
+class DnfManager(PackageManager):
+    @property
+    def tool(self) -> str:
+        """Get the tool name (dnf or dnf5)."""
+        return self._dnf_version  # Detects dnf4 vs dnf5
 ```
 
 ### Distro-Specific Setup

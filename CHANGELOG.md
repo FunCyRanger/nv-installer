@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.2.1-rc2] - 2026-04-03
+
+### Fixed
+
+- Critical bug: Installation failed with "Unknown package tool: fedora" because main.py passed distro.id to functions expecting tool names
+- Added `tool` property to PackageManager base class for tool name access
+- Fixed all CLI call sites to use `pkg_mgr.tool` instead of `distro.id`
+
+### Testing
+
+- Added comprehensive E2E tests for CLI workflows (simulation, CUDA, offline, rollback, revert)
+- Added integration tests for full installation flow with tool detection
+- Added regression tests for tool name vs distro ID
+- All tests run in CI across Ubuntu, Fedora, and Arch containers
+
+## [v0.2.1-rc1] - 2026-04-03
+
+### Added
+
+- Remove dead enterprise module (fleet, monitoring, security)
+- Add real package manager integration tests (DNF, APT, Pacman, Zypper)
+- Add comprehensive E2E tests covering all CLI workflows
+- Add Arch Linux container to CI matrix
+- Update Fedora from 40 to 43
+
+### Changed
+
+- CI now runs tests in containers to avoid resource limit issues
+- Coverage improved from 57% to 65%
+
+## [v0.2.0] - 2026-04-02
+
+### Added
+
+- Full installation orchestration with safety checks
+- Driver state detection (Proprietary/NVIDIA Open/Nouveau)
+- Pre-installation validation (disk space, package availability, kernel deps, Secure Boot)
+- Post-installation validation (packages, kernel module, nvidia-smi)
+- Nouveau handling with automatic re-enable on failure
+- Comprehensive unit tests (800+ tests)
+- Integration tests with real distro containers
+
+### Features
+
+- Package manager abstraction with tool-based detection
+- GPU compatibility matrix with auto-update
+- CUDA version locking for EOL/Limited GPUs (Maxwell, Pascal, Volta, Kepler)
+- Offline installation support with package caching
+- Rollback capability with snapshots
+- Hybrid graphics power profile management
+- Secure Boot MOK key enrollment
+
 ## [v0.1.0-b1] - 2026-03-18
 
 ### Added
@@ -57,5 +109,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Type Check: Clean
 - CI/CD: Configured with GitHub Actions
 
-[Unreleased]: https://github.com/FunCyRanger/nv-installer/compare/v0.1.0-b1...main
+[Unreleased]: https://github.com/FunCyRanger/nv-installer/compare/v0.2.1-rc2...main
+[v0.2.1-rc2]: https://github.com/FunCyRanger/nv-installer/releases/tag/v0.2.1-rc2
+[v0.2.1-rc1]: https://github.com/FunCyRanger/nv-installer/releases/tag/v0.2.1-rc1
+[v0.2.0]: https://github.com/FunCyRanger/nv-installer/releases/tag/v0.2.0
 [v0.1.0-b1]: https://github.com/FunCyRanger/nv-installer/releases/tag/v0.1.0-b1

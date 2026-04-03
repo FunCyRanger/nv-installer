@@ -11,6 +11,12 @@ This file contains reusable code patterns for nvidia-inst development.
 class PackageManager(ABC):
     """Abstract base class for package managers."""
 
+    @property
+    @abstractmethod
+    def tool(self) -> str:
+        """Get the package manager tool name (apt, dnf, pacman, zypper)."""
+        ...
+
     @abstractmethod
     def update(self) -> bool:
         """Update package lists."""
@@ -42,41 +48,59 @@ class PackageManager(ABC):
         ...
 ```
 
-### Concrete Implementation (Apt)
+### Tool Detection Pattern
+The package manager is detected based on available tools on the system, not distro mapping:
+
 ```python
-class Apt(PackageManager):
-    """Debian/Ubuntu package manager."""
+from nvidia_inst.distro.factory import get_package_manager
 
-    def install(self, packages: list[str]) -> bool:
-        cmd = ["apt-get", "install", "-y", *packages]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        return result.returncode == 0
+def get_package_manager() -> PackageManager:
+    """Get the appropriate package manager by detecting available tools.
 
-    def update(self) -> bool:
-        result = subprocess.run(
-            ["apt-get", "update"], capture_output=True, text=True
-        )
-        return result.returncode == 0
+    This function detects which package management tool is available
+    on the system and returns the appropriate manager instance.
+    Works with any distro using supported tools, not just known distros.
+    """
+    tool = detect_package_tool()  # Detects apt, dnf, dnf5, pacman, zypper, etc.
+    if tool is None:
+        raise RuntimeError("No supported package manager found.")
 
-    def is_available(self) -> bool:
-        return shutil.which("apt-get") is not None
+    manager_class = _TOOL_MANAGERS.get(tool)
+    return manager_class()
+
+# Usage:
+pkg_mgr = get_package_manager()
+print(pkg_mgr.tool)  # e.g., "dnf", "apt", "pacman", "zypper"
 ```
 
-### Factory Pattern
+### Concrete Implementation (Dnf)
 ```python
-def get_package_manager(distro_id: str) -> PackageManager:
-    """Get appropriate package manager for distribution."""
-    managers: dict[str, type[PackageManager]] = {
-        "ubuntu": Apt,
-        "debian": Apt,
-        "fedora": Dnf,
-        "arch": Pacman,
-        "opensuse": Zypper,
-    }
-    manager_class = managers.get(distro_id)
-    if manager_class is None:
-        raise UnsupportedDistroError(distro_id)
-    return manager_class()
+class DnfManager(PackageManager):
+    """DNF package manager for Fedora/RHEL."""
+
+    def __init__(self) -> None:
+        self._dnf_path = "/usr/bin/dnf"
+        self._dnf_version = self._detect_dnf_version()
+
+    @property
+    def tool(self) -> str:
+        """Get the tool name (dnf or dnf5)."""
+        return self._dnf_version  # Returns "dnf4" or "dnf5"
+
+    def _detect_dnf_version(self) -> str:
+        """Detect if running dnf4 or dnf5."""
+        result = subprocess.run(
+            [self._dnf_path, "--version"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if "dnf5" in result.stdout.lower():
+            return "dnf5"
+        return "dnf4"
+
+    def install(self, packages: list[str]) -> bool:
+        cmd = [self._dnf_path, "install", "-y"] + packages
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        return result.returncode == 0
 ```
 
 ---

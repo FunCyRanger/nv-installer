@@ -128,21 +128,57 @@ function install_driver() {
 
 ```
 src/nvidia_inst/
-├── cli.py              # Main entry point
-├── distro/             # Package manager abstraction (apt, dnf, pacman, zypper)
-├── gpu/                # GPU detection and compatibility matrix
-│   ├── hybrid.py       # Hybrid graphics detection & management
-│   └── matrix/          # GPU compatibility matrix data
-├── installer/          # Driver, CUDA installation, uninstaller
-│   └── hybrid.py       # Hybrid package installation & configuration
-├── gui/                # Tkinter and Zenity implementations
-└── utils/logger.py     # Logging utilities
+├── cli/                # CLI package
+│   ├── main.py         # Main CLI entry point
+│   ├── parser.py       # Argument parsing
+│   ├── installer.py    # Installation orchestration
+│   ├── commands.py     # CLI commands
+│   ├── simulate.py     # Simulation/dry-run logic
+│   └── __main__.py    # CLI entry point
+├── distro/             # Package manager abstraction
+│   ├── detector.py     # Distribution detection
+│   ├── factory.py      # Package manager factory
+│   ├── tools.py        # Tool-based command generation
+│   ├── package_manager.py  # Abstract base class
+│   ├── apt.py          # Debian/Ubuntu (APT)
+│   ├── dnf.py          # Fedora/RHEL (DNF)
+│   ├── pacman.py       # Arch Linux (Pacman)
+│   └── zypper.py       # openSUSE (Zypper)
+├── gpu/               # GPU detection and compatibility
+│   ├── detector.py     # GPU detection
+│   ├── compatibility.py # Driver version logic
+│   └── matrix/         # GPU compatibility matrix
+├── installer/         # Driver, CUDA, uninstaller
+│   ├── driver.py       # Driver installation
+│   ├── cuda.py         # CUDA installation
+│   ├── uninstaller.py  # Revert to Nouveau
+│   ├── prerequisites.py # Pre-install checks
+│   ├── validation.py   # Post-install validation
+│   ├── rollback.py     # Rollback capability
+│   ├── offline.py      # Offline installation
+│   └── secureboot.py   # Secure Boot handling
+├── gui/               # Tkinter and Zenity implementations
+└── utils/
+    └── logger.py      # Logging utilities
 
 tests/
-├── test_hybrid.py      # Hybrid graphics tests
-└── conftest.py         # Test fixtures
+├── conftest.py        # Test fixtures
+├── test_installation_flow.py  # Integration tests
+├── test_apt_real.py   # Real APT tests
+├── test_dnf_real.py    # Real DNF tests
+├── test_pacman_real.py # Real Pacman tests
+├── test_zypper_real.py # Real Zypper tests
+├── test_cli_workflows_e2e.py  # CLI workflow tests
+├── test_simulation_accuracy.py # Simulation tests
+├── test_cuda_e2e.py    # CUDA installation tests
+├── test_offline_e2e.py # Offline installation tests
+├── test_rollback_e2e.py # Rollback tests
+├── test_revert_e2e.py  # Revert to Nouveau tests
+└── test_e2e_installation.py # E2E installation tests
 
-scripts/                # install-*.sh, update-matrix.py
+scripts/
+├── update-matrix.py    # Matrix update script
+└── install-*.sh        # Distribution install scripts
 ```
 
 ## Testing

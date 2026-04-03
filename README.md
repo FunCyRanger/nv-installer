@@ -115,11 +115,11 @@ For detailed CUDA/driver compatibility information, see:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/nvidia-inst.git
+git clone https://github.com/FunCyRanger/nvidia-inst.git
 cd nvidia-inst
 
-# Run with dry-run to see what would be installed
-sudo ./nv-install --dry-run
+# Run with simulate to see what would be installed
+sudo ./nv-install --simulate
 
 # Actually install (will prompt for confirmation)
 sudo ./nv-install
@@ -133,7 +133,9 @@ sudo ./nv-install
 Options:
   --check                Check prerequisites only (shows hybrid info if detected)
   --gui                  Use GUI mode (Tkinter or Zenity)
-  --dry-run, --simulate  Show what would be installed without making changes
+  --gui-type {tkinter,zenity}
+                        Force specific GUI type
+  --simulate             Show what would be installed without making changes
   --yes, -y              Skip installation confirmation
   --driver-version VER   Specify driver version
   --cuda-version VER     Specify CUDA version
@@ -218,10 +220,10 @@ Options show CUDA version ranges when available:
 sudo ./nv-install --check
 ```
 
-### Dry-Run (Simulation)
+### Simulation Mode
 
 ```bash
-sudo ./nv-install --dry-run
+sudo ./nv-install --simulate
 ```
 
 Output:
@@ -389,9 +391,9 @@ The installer automatically detects your current driver state:
 
 ### Root Privilege Management
 
-- Scripts requests sudo access when needed
+- Scripts request sudo access when needed
 - Credentials are cached for smooth multi-step operations
-- Works without root in `--dry-run` and `--check` modes
+- Works without root in `--simulate` and `--check` modes
 
 ## Safety Features
 
@@ -431,17 +433,24 @@ The installer automatically detects your current driver state:
 nvidia-inst/
 ├── nv-install              # Shell wrapper script
 ├── src/nvidia_inst/
-│   ├── cli.py             # Main CLI entry point
+│   ├── cli/               # CLI package
+│   │   ├── main.py       # Main CLI entry point
+│   │   ├── parser.py     # Argument parsing
+│   │   ├── installer.py  # Installation orchestration
+│   │   ├── commands.py   # CLI commands
+│   │   ├── simulate.py    # Simulation/dry-run logic
+│   │   └── __main__.py   # CLI entry point
 │   ├── distro/
 │   │   ├── detector.py    # Distribution detection
-│   │   ├── factory.py     # Package manager factory
+│   │   ├── factory.py    # Package manager factory
 │   │   ├── package_manager.py  # Abstract base class
-│   │   ├── apt.py        # Debian/Ubuntu
-│   │   ├── dnf.py        # Fedora/RHEL
-│   │   ├── pacman.py     # Arch Linux
-│   │   └── zypper.py     # openSUSE
+│   │   ├── tools.py      # Tool-based command generation
+│   │   ├── apt.py        # Debian/Ubuntu (APT)
+│   │   ├── dnf.py        # Fedora/RHEL (DNF)
+│   │   ├── pacman.py     # Arch Linux (Pacman)
+│   │   └── zypper.py     # openSUSE (Zypper)
 │   ├── gpu/
-│   │   ├── detector.py    # GPU detection
+│   │   ├── detector.py   # GPU detection
 │   │   ├── compatibility.py  # Driver version logic
 │   │   └── matrix/
 │   │       ├── __init__.py
@@ -450,11 +459,14 @@ nvidia-inst/
 │   │       └── compatibility_data.json  # Fallback data
 │   ├── installer/
 │   │   ├── driver.py      # Driver installation
-│   │   ├── cuda.py        # CUDA installation
-│   │   ├── uninstaller.py  # Revert to Nouveau
-│   │   ├── prerequisites.py  # Pre-install checks
-│   │   ├── validation.py   # Post-install validation
-│   │   └── version_checker.py  # Version availability
+│   │   ├── cuda.py       # CUDA installation
+│   │   ├── uninstaller.py # Revert to Nouveau
+│   │   ├── prerequisites.py   # Pre-install checks
+│   │   ├── validation.py  # Post-install validation
+│   │   ├── version_checker.py  # Version availability
+│   │   ├── rollback.py    # Rollback capability
+│   │   ├── offline.py     # Offline installation
+│   │   └── secureboot.py  # Secure Boot handling
 │   ├── gui/
 │   │   ├── tkinter_gui.py
 │   │   └── zenity_gui.py
@@ -464,7 +476,8 @@ nvidia-inst/
 │   └── update-matrix.py   # Matrix update script
 ├── tests/
 ├── .github/workflows/
-│   └── matrix-update.yml  # GitHub Actions workflow
+│   ├── ci.yml            # CI/CD workflow
+│   └── integration-tests.yml  # Integration tests
 ├── AGENTS.md              # Developer guidelines
 └── requirements.txt
 ```
