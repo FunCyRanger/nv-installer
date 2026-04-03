@@ -366,3 +366,38 @@ def mock_nvidia_working_kmod_only(monkeypatch):
             "gpu_detected": True,
         },
     )
+
+
+# Fixtures for real package manager integration tests
+
+
+@pytest.fixture
+def dnf_manager():
+    """Create DnfManager instance for real integration tests."""
+    from nvidia_inst.distro.dnf import DnfManager
+
+    return DnfManager()
+
+
+@pytest.fixture
+def apt_manager():
+    """Create AptManager instance for real integration tests."""
+    from nvidia_inst.distro.apt import AptManager
+
+    return AptManager()
+
+
+@pytest.fixture
+def pacman_manager():
+    """Create PacmanManager instance for real integration tests."""
+    from nvidia_inst.distro.pacman import PacmanManager
+
+    return PacmanManager()
+
+
+@pytest.fixture
+def zypper_manager():
+    """Create ZypperManager instance for real integration tests."""
+    from nvidia_inst.distro.zypper import ZypperManager
+
+    return ZypperManager()
