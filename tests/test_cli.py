@@ -153,8 +153,9 @@ class TestCLIIntegration:
     ):
         """Test install_driver_cli when no GPU detected."""
         # Import the module to ensure it's loaded
-        import nvidia_inst.cli.main  # noqa: F401
         import sys
+
+        import nvidia_inst.cli.main  # noqa: F401
 
         # Get the actual module object
         cli_main = sys.modules["nvidia_inst.cli.main"]

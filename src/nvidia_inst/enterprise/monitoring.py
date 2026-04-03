@@ -9,7 +9,6 @@ import socket
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 from nvidia_inst.distro.detector import detect_distro
 from nvidia_inst.utils.logger import get_logger

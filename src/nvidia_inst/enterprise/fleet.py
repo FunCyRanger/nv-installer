@@ -4,14 +4,10 @@ This module provides functionality for managing NVIDIA drivers across
 multiple machines using Ansible, Puppet, or other configuration management tools.
 """
 
-import json
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from nvidia_inst.distro.detector import detect_distro
-from nvidia_inst.gpu.compatibility import DriverRange
 from nvidia_inst.utils.logger import get_logger
 
 logger = get_logger(__name__)
