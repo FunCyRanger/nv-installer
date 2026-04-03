@@ -135,9 +135,20 @@ jobs:
         run: |
           dnf install -y python3 python3-pip
 
-      - name: Install dependencies
+      - name: Install dependencies (Ubuntu 24.04+)
+        if: matrix.distro == 'ubuntu:24.04'
         run: |
           pip install --break-system-packages -e . pytest
+
+      - name: Install dependencies (Ubuntu 22.04)
+        if: matrix.distro == 'ubuntu:22.04'
+        run: |
+          pip install -e . pytest
+
+      - name: Install dependencies (Fedora)
+        if: contains(matrix.distro, 'fedora')
+        run: |
+          pip install -e . pytest
 
       - name: Run E2E table tests
         run: pytest tests/test_driver_state_e2e.py -v
