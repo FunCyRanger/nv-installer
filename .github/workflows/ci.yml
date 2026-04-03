@@ -87,7 +87,7 @@ jobs:
       
       - name: Install dependencies (Arch)
         if: contains(matrix.distro, 'arch')
-        run: pip install -e ".[dev]"
+        run: pip install --break-system-packages -e ".[dev]"
       
       - name: Run tests
         run: pytest tests/ --tb=short -q
@@ -144,7 +144,7 @@ jobs:
       - name: Install dependencies (Arch)
         if: contains(matrix.distro, 'arch')
         run: |
-          pip install -e . pytest
+          pip install --break-system-packages -e . pytest
 
       - name: Run E2E table tests
         run: pytest tests/test_driver_state_e2e.py -v
@@ -191,7 +191,7 @@ jobs:
       - name: Install dependencies (Arch)
         if: contains(matrix.distro, 'arch')
         run: |
-          pip install -e . pytest
+          pip install --break-system-packages -e . pytest
 
       - name: Run E2E installation tests
         run: pytest tests/test_e2e_installation.py -v
