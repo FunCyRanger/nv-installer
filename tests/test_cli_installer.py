@@ -180,7 +180,7 @@ class TestRebuildInitramfs:
 
         assert result is False
 
-    @patch("nvidia_inst.utils.permissions.is_root", return_value=False)
+    @patch("nvidia_inst.cli.installer.is_root", return_value=False)
     @patch("nvidia_inst.cli.installer.get_initramfs_command")
     @patch("subprocess.run")
     def test_rebuild_with_sudo(self, mock_run, mock_cmd, mock_root):

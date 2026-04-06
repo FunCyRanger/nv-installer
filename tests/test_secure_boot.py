@@ -659,13 +659,15 @@ class TestSignNvidiaModules:
 class TestSetupDkmsHook:
     """Tests for setup_dkms_hook()."""
 
-    def test_hook_created(self, tmp_path):
-        """Test DKMS hook creation requires root (returns False in test env)."""
+    @patch("pathlib.Path.mkdir")
+    def test_hook_created(self, mock_mkdir, tmp_path):
+        """Test DKMS hook creation when mkdir fails (no root)."""
         script = tmp_path / "sign-nvidia-modules"
         script.write_text("#!/bin/bash")
         script.chmod(0o755)
+        mock_mkdir.side_effect = PermissionError("Permission denied")
         result = setup_dkms_hook(script, "ubuntu")
-        assert result is False  # Requires root
+        assert result is False  # PermissionError means no root
 
     def test_hook_not_needed(self, tmp_path):
         """Test DKMS hook not needed for non-Debian distros."""
@@ -673,35 +675,37 @@ class TestSetupDkmsHook:
         result = setup_dkms_hook(script, "fedora")
         assert result is True  # No hook needed
 
-    def test_hook_permission_error(self, tmp_path):
+    @patch("pathlib.Path.mkdir")
+    def test_hook_permission_error(self, mock_mkdir, tmp_path):
         """Test DKMS hook permission error."""
         script = tmp_path / "sign-nvidia-modules"
         script.write_text("#!/bin/bash")
-
-        with patch("pathlib.Path.mkdir", side_effect=PermissionError()):
-            result = setup_dkms_hook(script, "ubuntu")
-            assert result is False
+        mock_mkdir.side_effect = PermissionError("Permission denied")
+        result = setup_dkms_hook(script, "ubuntu")
+        assert result is False
 
 
 class TestSetupPacmanHook:
     """Tests for setup_pacman_hook()."""
 
-    def test_hook_created(self, tmp_path):
-        """Test pacman hook creation requires root (returns False in test env)."""
+    @patch("pathlib.Path.mkdir")
+    def test_hook_created(self, mock_mkdir, tmp_path):
+        """Test pacman hook creation when mkdir fails (no root)."""
         script = tmp_path / "sign-nvidia-modules"
         script.write_text("#!/bin/bash")
         script.chmod(0o755)
+        mock_mkdir.side_effect = PermissionError("Permission denied")
         result = setup_pacman_hook(script)
-        assert result is False  # Requires root
+        assert result is False  # PermissionError means no root
 
-    def test_hook_permission_error(self, tmp_path):
+    @patch("pathlib.Path.mkdir")
+    def test_hook_permission_error(self, mock_mkdir, tmp_path):
         """Test pacman hook permission error."""
         script = tmp_path / "sign-nvidia-modules"
         script.write_text("#!/bin/bash")
-
-        with patch("pathlib.Path.mkdir", side_effect=PermissionError()):
-            result = setup_pacman_hook(script)
-            assert result is False
+        mock_mkdir.side_effect = PermissionError("Permission denied")
+        result = setup_pacman_hook(script)
+        assert result is False
 
 
 class TestInstallSigningScript:
