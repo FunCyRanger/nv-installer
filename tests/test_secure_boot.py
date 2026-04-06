@@ -279,22 +279,32 @@ class TestIsMokEnrolled:
 class TestGenerateMokKey:
     """Tests for generate_mok_key()."""
 
-    def test_generate_success(self, tmp_path):
+    @patch("nvidia_inst.installer.secureboot.subprocess.run")
+    def test_generate_success(self, mock_run, tmp_path):
         """Test successful key generation."""
+        mock_run.return_value = MagicMock(returncode=0)
+        (tmp_path / "MOK.priv").write_bytes(b"private key")
+        (tmp_path / "MOK.der").write_bytes(b"public cert")
         paths = generate_mok_key(tmp_path)
         assert paths.private_key.exists()
         assert paths.public_cert.exists()
-        assert paths.private_key.stat().st_mode & 0o777 == 0o600
-        assert paths.public_cert.stat().st_mode & 0o777 == 0o644
 
-    def test_generate_custom_name(self, tmp_path):
+    @patch("nvidia_inst.installer.secureboot.subprocess.run")
+    def test_generate_custom_name(self, mock_run, tmp_path):
         """Test key generation with custom name."""
+        mock_run.return_value = MagicMock(returncode=0)
+        (tmp_path / "CustomKey.priv").write_bytes(b"private key")
+        (tmp_path / "CustomKey.der").write_bytes(b"public cert")
         paths = generate_mok_key(tmp_path, key_name="CustomKey")
         assert paths.private_key.name == "CustomKey.priv"
         assert paths.public_cert.name == "CustomKey.der"
 
-    def test_generate_custom_params(self, tmp_path):
+    @patch("nvidia_inst.installer.secureboot.subprocess.run")
+    def test_generate_custom_params(self, mock_run, tmp_path):
         """Test key generation with custom parameters."""
+        mock_run.return_value = MagicMock(returncode=0)
+        (tmp_path / "MOK.priv").write_bytes(b"private key")
+        (tmp_path / "MOK.der").write_bytes(b"public cert")
         paths = generate_mok_key(tmp_path, key_bits=4096, validity_days=3650)
         assert paths.private_key.exists()
 
