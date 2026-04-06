@@ -401,3 +401,186 @@ def zypper_manager():
     from nvidia_inst.distro.zypper import ZypperManager
 
     return ZypperManager()
+
+
+# Additional fixtures for installation/reinstall/driver switch tests
+
+
+@pytest.fixture
+def mock_nvidia_open_installed(monkeypatch):
+    """Mock check_nvidia_open_installed to return True."""
+    from nvidia_inst.installer import driver
+
+    monkeypatch.setattr(f"{driver.__name__}.check_nvidia_open_installed", lambda: True)
+
+
+@pytest.fixture
+def mock_nvidia_open_not_installed(monkeypatch):
+    """Mock check_nvidia_open_installed to return False."""
+    from nvidia_inst.installer import driver
+
+    monkeypatch.setattr(f"{driver.__name__}.check_nvidia_open_installed", lambda: False)
+
+
+@pytest.fixture
+def mock_nonfree_available(monkeypatch):
+    """Mock check_nonfree_available to return True."""
+    from nvidia_inst.installer import driver
+
+    monkeypatch.setattr(f"{driver.__name__}.check_nonfree_available", lambda: True)
+
+
+@pytest.fixture
+def mock_nonfree_not_available(monkeypatch):
+    """Mock check_nonfree_available to return False."""
+    from nvidia_inst.installer import driver
+
+    monkeypatch.setattr(f"{driver.__name__}.check_nonfree_available", lambda: False)
+
+
+@pytest.fixture
+def mock_current_driver_type(monkeypatch):
+    """Mock get_current_driver_type. Parametrize with driver_type value."""
+
+    def _mock(driver_type="none"):
+        from nvidia_inst.installer import driver
+
+        monkeypatch.setattr(
+            f"{driver.__name__}.get_current_driver_type", lambda: driver_type
+        )
+
+    return _mock
+
+
+@pytest.fixture
+def mock_cuda_version(monkeypatch):
+    """Mock detect_installed_cuda_version to return a version string."""
+
+    def _mock(version="12.2"):
+        import nvidia_inst.installer.cuda as cuda_module
+
+        monkeypatch.setattr(
+            f"{cuda_module.__name__}.detect_installed_cuda_version",
+            lambda: version,
+        )
+
+    return _mock
+
+
+@pytest.fixture
+def mock_no_cuda(monkeypatch):
+    """Mock detect_installed_cuda_version to return None."""
+    import nvidia_inst.installer.cuda as cuda_module
+
+    monkeypatch.setattr(
+        f"{cuda_module.__name__}.detect_installed_cuda_version",
+        lambda: None,
+    )
+
+
+@pytest.fixture
+def mock_pkg_manager():
+    """Create a fully mocked package manager with all methods."""
+    mock = MagicMock()
+    mock.update.return_value = MagicMock(returncode=0)
+    mock.install.return_value = MagicMock(returncode=0)
+    mock.remove.return_value = MagicMock(returncode=0)
+    mock.pin_version.return_value = MagicMock(returncode=0)
+    mock.is_installed.return_value = False
+    return mock
+
+
+@pytest.fixture
+def mock_detect_gpu_multiple():
+    """Parameterized GPU info fixture. Use with different GPU models."""
+
+    def _mock(
+        model="NVIDIA GeForce RTX 3080",
+        compute_capability=8.6,
+        generation="ampere",
+        driver_version="535.154.05",
+        cuda_version="12.2",
+        vram="10GB",
+    ):
+        from nvidia_inst.gpu.detector import GPUInfo
+
+        return GPUInfo(
+            model=model,
+            compute_capability=compute_capability,
+            generation=generation,
+            driver_version=driver_version,
+            cuda_version=cuda_version,
+            vram=vram,
+        )
+
+    return _mock
+
+
+@pytest.fixture
+def mock_distro_all():
+    """Parameterized distro fixture. Use with different distro IDs."""
+
+    def _mock(
+        distro_id="ubuntu",
+        version_id="22.04",
+        name="Ubuntu",
+        pretty_name="Ubuntu 22.04 LTS",
+        kernel="5.15.0-generic",
+    ):
+        from nvidia_inst.distro.detector import DistroInfo
+
+        return DistroInfo(
+            id=distro_id,
+            version_id=version_id,
+            name=name,
+            pretty_name=pretty_name,
+            kernel=kernel,
+        )
+
+    return _mock
+
+
+@pytest.fixture
+def mock_driver_range_pascal():
+    """Mock driver range for Pascal (limited) GPU."""
+    return DriverRange(
+        min_version="450.191.0",
+        max_version="580.142",
+        max_branch="580",
+        cuda_min="8.0",
+        cuda_max="12.x",
+        cuda_is_locked=True,
+        cuda_locked_major="12",
+        is_eol=False,
+        is_limited=True,
+    )
+
+
+@pytest.fixture
+def mock_driver_range_blackwell():
+    """Mock driver range for Blackwell GPU."""
+    return DriverRange(
+        min_version="550.127.05",
+        max_version=None,
+        max_branch="590",
+        cuda_min="12.4",
+        cuda_max="13.x",
+        is_eol=False,
+        is_limited=False,
+    )
+
+
+@pytest.fixture
+def mock_disable_nouveau_success(monkeypatch):
+    """Mock disable_nouveau to return True."""
+    from nvidia_inst.installer import driver
+
+    monkeypatch.setattr(f"{driver.__name__}.disable_nouveau", lambda: True)
+
+
+@pytest.fixture
+def mock_disable_nouveau_failure(monkeypatch):
+    """Mock disable_nouveau to return False."""
+    from nvidia_inst.installer import driver
+
+    monkeypatch.setattr(f"{driver.__name__}.disable_nouveau", lambda: False)
